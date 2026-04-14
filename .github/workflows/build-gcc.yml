@@ -1,0 +1,108 @@
+name: Build GCC
+
+on:
+  push:
+    paths:
+      - ".github/workflows/build-gcc.yml"
+      - ".gitmodules"
+      - "gcc"
+      - "release.toml"
+      - "scripts/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          submodules: recursive
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            flex \
+            bison \
+            texinfo \
+            libgmp-dev \
+            libmpfr-dev \
+            libmpc-dev \
+            libisl-dev \
+            zlib1g-dev \
+            libzstd-dev \
+            python3 \
+            xz-utils \
+            wget \
+            ca-certificates
+
+      - name: Setup Alire and bootstrap GNAT
+        uses: alire-project/setup-alire@v5
+        with:
+          version: 2.1.0
+          toolchain: gnat_native gprbuild
+
+      - name: Add Alire GNAT toolchain to PATH
+        run: |
+          rm -rf alirebootstrap
+          alr -n -q init --bin alirebootstrap >/dev/null
+          pushd alirebootstrap >/dev/null
+          GNAT_BIN_DIR="$(dirname "$(alr exec -- which gnat)")"
+          echo "ALIRE_GNAT_BIN=${GNAT_BIN_DIR}" >> "${GITHUB_ENV}"
+          echo "${GNAT_BIN_DIR}" >> "${GITHUB_PATH}"
+          alr exec -- gnat --version
+          alr exec -- gnatmake --version
+          alr exec -- gnatbind --version
+          popd >/dev/null
+          rm -rf alirebootstrap
+
+      - name: Load release metadata
+        run: python3 ./scripts/release_metadata.py --format github-env --repo-slug "${GITHUB_REPOSITORY}" >> "${GITHUB_ENV}"
+
+      - name: Build GCC
+        run: ./scripts/build_gcc.sh --jobs 32 --source-dir ./gcc --work-dir ./build --stage-dir ./stage
+
+      - name: Smoke test staged compiler
+        run: ./scripts/smoke_test.sh --stage-dir ./stage
+
+      - name: Package staged compiler
+        run: ./scripts/package_release.sh --stage-dir ./stage --output-dir ./dist
+
+      - name: Generate index manifest
+        run: python3 ./scripts/generate_index.py --repo-slug "${GITHUB_REPOSITORY}" --sha256-file "./dist/${ASSET_SHA_NAME}"
+
+      - name: Validate private index with Alire
+        run: |
+          alr index --add="${PWD}" --name=prunt_ci
+          alr index --update-all
+          alr show "gnat_native=${CRATE_VERSION}"
+          alr index --del=prunt_ci || true
+
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || \
+          gh release create "${RELEASE_TAG}" \
+            --target "${GITHUB_SHA}" \
+            --title "${RELEASE_NAME}" \
+            --notes "Built from Prunt3D/gcc commit ${GCC_COMMIT}"
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${RELEASE_TAG}" "./dist/${ASSET_NAME}" "./dist/${ASSET_SHA_NAME}" --clobber
+
+      - name: Publish index branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/export_index_branch.sh --branch "${INDEX_BRANCH}" --push
