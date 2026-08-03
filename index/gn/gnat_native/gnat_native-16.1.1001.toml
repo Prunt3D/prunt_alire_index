@@ -1,13 +1,13 @@
 name = "gnat_native"
-version = "15.2.1002"
-provides = ["gnat=15.2.1002"]
+version = "16.1.1001"
+provides = ["gnat=16.1.1001"]
 description = "The GNAT Ada compiler with backports"
 website = "https://github.com/Prunt3D/gcc"
 maintainers = ["Liam Powell <liam@liampwll.com>"]
 maintainers-logins = ["liampwll"]
 licenses = "GPL-3.0-or-later AND GPL-3.0-or-later WITH GCC-exception-3.1"
 auto-gpr-with = false
-notes = "Built from GCC 15.2.1002 commit 579d65c68e16249b49445919e20ba2fc0bc573a5"
+notes = "Built from GCC 16.1.1001 commit abeb934b867c5df84bb44f5121555f6cfa40a86e"
 
 [configuration]
 disabled = true
@@ -20,5 +20,5 @@ LD_RUN_PATH.prepend = "${CRATE_ROOT}/local/lib64"
 
 [origin."case(os)".linux."case(host-arch)".x86-64]
 binary = true
-url = "https://github.com/Prunt3D/prunt_alire_index/releases/download/gnat-15.2.1002/gnat-x86_64-linux-15.2.1002.tar.gz"
-hashes = ["sha256:ec7a346c2c576a8d8fac3175af032f8010d738688fe12d52fb0e0c8abefc26a3"]
+url = "https://github.com/Prunt3D/prunt_alire_index/releases/download/gnat-16.1.1001/gnat-x86_64-linux-16.1.1001.tar.gz"
+hashes = ["sha256:0deafb57d1223dd2412d454ac205396b1f9e25807c0a2791391c23a92f0e8bbe"]
