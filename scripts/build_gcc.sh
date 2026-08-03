@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-JOBS=8
+JOBS="$(nproc)"
 SOURCE_DIR="./gcc"
 WORK_DIR="./build"
 STAGE_DIR="./stage"
@@ -64,7 +64,7 @@ mkdir -p "$WORK_DIR" "$STAGE_DIR"
 
 pushd "$WORK_DIR" >/dev/null
 "$SOURCE_DIR/configure" \
-  --enable-languages=ada \
+  --enable-languages=c,ada,fortran \
   --disable-multilib \
   --disable-bootstrap \
   --enable-checking=yes,extra,rtl

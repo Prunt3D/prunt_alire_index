@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import re
 import shlex
 import subprocess
@@ -18,6 +19,14 @@ RELEASE_FILE = REPO_ROOT / "release.toml"
 GCC_DIR = REPO_ROOT / "gcc"
 INDEX_BRANCH = "alire-index"
 PLACEHOLDER_REPO = "REPO_OWNER/REPO_NAME"
+PACKAGE_ARCHES = {
+    "x86_64": "x86-64",
+    "aarch64": "aarch64",
+}
+ARCH_ALIASES = {
+    "amd64": "x86_64",
+    "arm64": "aarch64",
+}
 
 
 def git(*args: str, cwd: Path | None = None) -> str:
@@ -62,18 +71,31 @@ def resolve_repo_slug(explicit_repo_slug: str | None) -> str:
     return PLACEHOLDER_REPO
 
 
-def metadata(repo_slug: str | None = None) -> dict[str, str]:
+def normalize_package_arch(value: str) -> str:
+    package_arch = ARCH_ALIASES.get(value.lower(), value.lower())
+    if package_arch not in PACKAGE_ARCHES:
+        supported = ", ".join(PACKAGE_ARCHES)
+        raise SystemExit(f"Unsupported package architecture {value!r}; expected one of: {supported}")
+    return package_arch
+
+
+def metadata(repo_slug: str | None = None, package_arch: str | None = None) -> dict[str, str]:
     release = load_release_config()
     crate_version = release["crate_version"]
     gcc_commit = git("-C", str(GCC_DIR), "rev-parse", "HEAD")
     gcc_version = crate_version
     repo_slug = resolve_repo_slug(repo_slug)
-    asset_name = f"gnat-x86_64-linux-{crate_version}.tar.gz"
+    package_arch = normalize_package_arch(
+        package_arch or os.environ.get("PACKAGE_ARCH", platform.machine())
+    )
+    asset_name = f"gnat-{package_arch}-linux-{crate_version}.tar.gz"
     release_tag = f"gnat-{crate_version}"
     return {
         "CRATE_VERSION": crate_version,
         "GCC_COMMIT": gcc_commit,
         "GCC_VERSION": gcc_version,
+        "PACKAGE_ARCH": package_arch,
+        "ALIRE_HOST_ARCH": PACKAGE_ARCHES[package_arch],
         "INDEX_BRANCH": INDEX_BRANCH,
         "REPO_SLUG": repo_slug,
         "ASSET_NAME": asset_name,
@@ -98,6 +120,7 @@ def emit_github_env(values: dict[str, str]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Emit release metadata for scripts and CI.")
     parser.add_argument("--repo-slug", help="Override the GitHub repository slug used in release URLs.")
+    parser.add_argument("--package-arch", help="Architecture used in the release asset name.")
     parser.add_argument(
         "--format",
         choices=("json", "shell", "github-env"),
@@ -106,7 +129,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    values = metadata(args.repo_slug)
+    values = metadata(args.repo_slug, args.package_arch)
 
     if args.format == "json":
         json.dump(values, sys.stdout, indent=2, sort_keys=True)

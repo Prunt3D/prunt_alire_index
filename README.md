@@ -1,6 +1,6 @@
 # Prunt Alire Index
 
-This repository hosts a private Alire index for a GCC/GNAT build produced from the `Prunt3D/gcc` fork tracked as the `gcc/` submodule.
+This repository hosts a private Alire index for x86-64 and ARM64 GCC builds with C, Ada, and Fortran enabled, produced from the `Prunt3D/gcc` fork tracked as the `gcc/` submodule.
 
 ## Release flow
 

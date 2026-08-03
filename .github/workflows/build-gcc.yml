@@ -14,8 +14,17 @@ permissions:
   contents: write
 
 jobs:
-  build-and-publish:
-    runs-on: ubuntu-24.04
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            package_arch: x86_64
+          - runner: ubuntu-24.04-arm
+            package_arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    env:
+      PACKAGE_ARCH: ${{ matrix.package_arch }}
 
     steps:
       - name: Checkout repository
@@ -30,6 +39,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
+            gnat \
+            gfortran \
             flex \
             bison \
             texinfo \
@@ -44,31 +55,18 @@ jobs:
             wget \
             ca-certificates
 
-      - name: Setup Alire and bootstrap GNAT
-        uses: alire-project/setup-alire@v5
-        with:
-          version: 2.1.0
-          toolchain: gnat_native gprbuild
-
-      - name: Add Alire GNAT toolchain to PATH
+      - name: Verify bootstrap compilers
         run: |
-          rm -rf alirebootstrap
-          alr -n -q init --bin alirebootstrap >/dev/null
-          pushd alirebootstrap >/dev/null
-          GNAT_BIN_DIR="$(dirname "$(alr exec -- which gnat)")"
-          echo "ALIRE_GNAT_BIN=${GNAT_BIN_DIR}" >> "${GITHUB_ENV}"
-          echo "${GNAT_BIN_DIR}" >> "${GITHUB_PATH}"
-          alr exec -- gnat --version
-          alr exec -- gnatmake --version
-          alr exec -- gnatbind --version
-          popd >/dev/null
-          rm -rf alirebootstrap
+          gnat --version
+          gnatmake --version
+          gnatbind --version
+          gfortran --version
 
       - name: Load release metadata
         run: python3 ./scripts/release_metadata.py --format github-env --repo-slug "${GITHUB_REPOSITORY}" >> "${GITHUB_ENV}"
 
       - name: Build GCC
-        run: ./scripts/build_gcc.sh --jobs 32 --source-dir ./gcc --work-dir ./build --stage-dir ./stage
+        run: ./scripts/build_gcc.sh --jobs "$(nproc)" --source-dir ./gcc --work-dir ./build --stage-dir ./stage
 
       - name: Smoke test staged compiler
         run: ./scripts/smoke_test.sh --stage-dir ./stage
@@ -76,8 +74,47 @@ jobs:
       - name: Package staged compiler
         run: ./scripts/package_release.sh --stage-dir ./stage --output-dir ./dist
 
+      - name: Upload packaged compiler
+        uses: actions/upload-artifact@v4
+        with:
+          name: gcc-${{ matrix.package_arch }}-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          submodules: recursive
+
+      - name: Setup Alire for index validation
+        uses: alire-project/setup-alire@v5
+        with:
+          version: 2.1.0
+
+      - name: Load release metadata
+        run: python3 ./scripts/release_metadata.py --format github-env --repo-slug "${GITHUB_REPOSITORY}" >> "${GITHUB_ENV}"
+
+      - name: Download packaged compilers
+        uses: actions/download-artifact@v5
+        with:
+          pattern: gcc-*-${{ github.sha }}
+          path: dist
+          merge-multiple: true
+
       - name: Generate index manifest
-        run: python3 ./scripts/generate_index.py --repo-slug "${GITHUB_REPOSITORY}" --sha256-file "./dist/${ASSET_SHA_NAME}"
+        run: |
+          python3 ./scripts/generate_index.py \
+            --repo-slug "${GITHUB_REPOSITORY}" \
+            --sha256-file "x86_64=./dist/gnat-x86_64-linux-${CRATE_VERSION}.tar.gz.sha256" \
+            --sha256-file "aarch64=./dist/gnat-aarch64-linux-${CRATE_VERSION}.tar.gz.sha256"
 
       - name: Validate private index with Alire
         run: |
@@ -99,7 +136,7 @@ jobs:
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${RELEASE_TAG}" "./dist/${ASSET_NAME}" "./dist/${ASSET_SHA_NAME}" --clobber
+        run: gh release upload "${RELEASE_TAG}" ./dist/*.tar.gz ./dist/*.tar.gz.sha256 --clobber
 
       - name: Publish index branch
         env:

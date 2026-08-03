@@ -34,6 +34,27 @@ mkdir -p "$TEST_DIR"
 
 gnat --version
 gnatmake --version
+gcc --version
+gfortran --version
+
+cat > "$TEST_DIR/hello.c" <<'EOF'
+#include <stdio.h>
+
+int main(void) {
+    puts("Hello, C!");
+    return 0;
+}
+EOF
+
+pushd "$TEST_DIR" >/dev/null
+gcc -o hello_c hello.c
+c_output="$(./hello_c)"
+popd >/dev/null
+
+if [[ "$c_output" != "Hello, C!" ]]; then
+  echo "Unexpected C smoke test output: $c_output" >&2
+  exit 1
+fi
 
 cat > "$TEST_DIR/hello.adb" <<'EOF'
 with Ada.Text_IO;
@@ -51,5 +72,22 @@ popd >/dev/null
 
 if [[ "$output" != "Hello, World!" ]]; then
   echo "Unexpected smoke test output: $output" >&2
+  exit 1
+fi
+
+cat > "$TEST_DIR/hello.f90" <<'EOF'
+program hello_fortran
+  implicit none
+  print '(A)', 'Hello, Fortran!'
+end program hello_fortran
+EOF
+
+pushd "$TEST_DIR" >/dev/null
+gfortran -o hello_fortran hello.f90
+fortran_output="$(./hello_fortran)"
+popd >/dev/null
+
+if [[ "$fortran_output" != "Hello, Fortran!" ]]; then
+  echo "Unexpected Fortran smoke test output: $fortran_output" >&2
   exit 1
 fi

@@ -29,6 +29,11 @@ if [[ ! -x "$STAGE_DIR/usr/local/bin/gnat" ]]; then
   exit 1
 fi
 
+if [[ ! -x "$STAGE_DIR/usr/local/bin/gfortran" ]]; then
+  echo "Expected staged compiler at $STAGE_DIR/usr/local/bin/gfortran" >&2
+  exit 1
+fi
+
 mkdir -p "$OUTPUT_DIR"
 
 eval "$(python3 "$(dirname "$0")/release_metadata.py" --format shell)"
