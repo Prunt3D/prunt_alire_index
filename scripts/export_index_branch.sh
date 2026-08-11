@@ -76,9 +76,11 @@ else
   git -C "${WORK_DIR}" checkout --orphan "${BRANCH}" >/dev/null
 fi
 
-find "${WORK_DIR}" -mindepth 1 -maxdepth 1 ! -name ".git" -exec rm -rf {} +
-
-cp -a "${INDEX_DIR}" "${WORK_DIR}/index"
+# Overlay the generated index on the published branch instead of replacing the
+# branch contents.  Older crate-version manifests live only on the index branch
+# and must remain available when a new version is published.
+mkdir -p "${WORK_DIR}/index"
+cp -a "${INDEX_DIR}/." "${WORK_DIR}/index/"
 cat > "${WORK_DIR}/README.md" <<EOF
 # Prunt Alire Index
 
