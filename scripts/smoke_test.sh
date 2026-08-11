@@ -37,6 +37,14 @@ gnatmake --version
 gcc --version
 gfortran --version
 
+if [[ "${PACKAGE_ARCH:-}" == "aarch64" ]]; then
+  target="$(gcc -dumpmachine)"
+  if [[ "$target" != "aarch64-linux-gnu" ]]; then
+    echo "Unexpected GCC target: $target (expected aarch64-linux-gnu)" >&2
+    exit 1
+  fi
+fi
+
 cat > "$TEST_DIR/hello.c" <<'EOF'
 #include <stdio.h>
 

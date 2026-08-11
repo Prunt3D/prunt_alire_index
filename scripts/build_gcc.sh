@@ -63,7 +63,17 @@ rm -rf "$WORK_DIR" "$STAGE_DIR"
 mkdir -p "$WORK_DIR" "$STAGE_DIR"
 
 pushd "$WORK_DIR" >/dev/null
+CONFIGURE_PLATFORM_ARGS=()
+if [[ "${PACKAGE_ARCH:-}" == "aarch64" ]]; then
+  CONFIGURE_PLATFORM_ARGS+=(
+    --build=aarch64-linux-gnu
+    --host=aarch64-linux-gnu
+    --target=aarch64-linux-gnu
+  )
+fi
+
 "$SOURCE_DIR/configure" \
+  "${CONFIGURE_PLATFORM_ARGS[@]}" \
   --enable-languages=c,ada,fortran \
   --disable-multilib \
   --disable-bootstrap \
