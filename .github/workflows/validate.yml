@@ -1,0 +1,36 @@
+name: Validate release tooling
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/**"
+      - "scripts/**"
+      - "tests/**"
+      - "libadalang/**"
+      - "release.toml"
+      - "gcc"
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Install test dependency
+        run: python3 -m pip install PyYAML==6.0.2
+      - name: Test manifests, workflow triggers and index publication
+        run: python3 -m unittest discover -s tests -v
+      - name: Check shell syntax
+        run: |
+          for script in scripts/*.sh; do
+            bash -n "$script"
+          done
+      - name: Validate GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= -pyflakes=

@@ -82,7 +82,12 @@ def normalize_package_arch(value: str) -> str:
 def metadata(repo_slug: str | None = None, package_arch: str | None = None) -> dict[str, str]:
     release = load_release_config()
     crate_version = release["crate_version"]
-    gcc_commit = git("-C", str(GCC_DIR), "rev-parse", "HEAD")
+    # Publishing needs only the gitlink, not a multi-gigabyte GCC checkout.
+    # Release preparation still needs the current, possibly unstaged submodule.
+    if (GCC_DIR / ".git").exists():
+        gcc_commit = git("-C", str(GCC_DIR), "rev-parse", "HEAD")
+    else:
+        gcc_commit = git("rev-parse", "HEAD:gcc")
     gcc_version = crate_version
     repo_slug = resolve_repo_slug(repo_slug)
     package_arch = normalize_package_arch(

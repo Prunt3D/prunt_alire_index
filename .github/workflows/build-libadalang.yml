@@ -1,0 +1,109 @@
+name: Build static Libadalang
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "libadalang/**"
+      - "scripts/libadalang_release.py"
+      - ".github/workflows/build-libadalang.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Load release metadata
+        run: python3 scripts/libadalang_release.py metadata --format github-env >> "$GITHUB_ENV"
+      - name: Refuse to rebuild an already published version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish_release.py --tag "$RELEASE_TAG" --check-unpublished
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgmp-dev python3
+      - uses: alire-project/setup-alire@v5
+        with:
+          version: 2.1.0
+          toolchain: --disable-assistant
+      - name: Use released Prunt compiler
+        run: |
+          alr -n index --add="git+https://github.com/${GITHUB_REPOSITORY}.git#alire-index" --name=prunt --before=community
+          alr -n index --update-all
+          # Keep source dependencies local so the smoke test can hide them.
+          alr -n settings --global --set dependencies.shared false
+      - name: Build and package static libraries
+        run: python3 scripts/libadalang_release.py build
+      - name: Test the binary archive through Alire
+        run: |
+          mkdir -p build
+          mv libadalang/alire build/libadalang-build-state
+          trap 'mv build/libadalang-build-state libadalang/alire' EXIT
+          python3 scripts/smoke_test_libadalang.py dist/libadalang-static-${{ matrix.arch }}-linux-*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libadalang-${{ matrix.arch }}-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: alire-index-publication
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - uses: alire-project/setup-alire@v5
+        with:
+          version: 2.1.0
+          toolchain: --disable-assistant
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: libadalang-*-${{ github.sha }}
+          path: dist
+          merge-multiple: true
+      - name: Generate and validate the index manifest
+        run: |
+          python3 scripts/libadalang_release.py metadata --format github-env >> "$GITHUB_ENV"
+          python3 scripts/libadalang_release.py manifest --repo-slug "$GITHUB_REPOSITORY"
+          alr -n index --add="$PWD" --name=prunt_ci --before=community
+          alr -n index --check
+          alr -n show libadalang_prebuilt
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/publish_release.py --tag "$RELEASE_TAG" --title "$RELEASE_NAME" \
+            --notes "Prebuilt static Libadalang and Ada dependencies, using Prunt GNAT ${GNAT_VERSION}. Built on Ubuntu 24.04 for x86-64 and ARM64. Requires system GMP."
+      - name: Publish index branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/export_index_branch.sh --branch "$INDEX_BRANCH" --push

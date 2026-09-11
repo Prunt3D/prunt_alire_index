@@ -2,19 +2,31 @@ name: Build GCC
 
 on:
   push:
+    branches: [master]
     paths:
-      - ".github/workflows/build-gcc.yml"
-      - ".gitmodules"
       - "gcc"
       - "release.toml"
-      - "scripts/**"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Load release metadata without downloading GCC
+        run: python3 scripts/release_metadata.py --format github-env >> "$GITHUB_ENV"
+      - name: Refuse to rebuild an existing compiler release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish_release.py --tag "$RELEASE_TAG" --check-unpublished
+
   build:
+    needs: prepare
     strategy:
       matrix:
         include:
@@ -80,11 +92,17 @@ jobs:
           name: gcc-${{ matrix.package_arch }}-${{ github.sha }}
           path: dist/*
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
 
   publish:
     needs: build
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: alire-index-publication
+      cancel-in-progress: false
 
     steps:
       - name: Checkout repository
@@ -92,12 +110,13 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
-          submodules: recursive
+          submodules: false
 
       - name: Setup Alire for index validation
         uses: alire-project/setup-alire@v5
         with:
           version: 2.1.0
+          toolchain: --disable-assistant
 
       - name: Load release metadata
         run: python3 ./scripts/release_metadata.py --format github-env --repo-slug "${GITHUB_REPOSITORY}" >> "${GITHUB_ENV}"
@@ -123,20 +142,12 @@ jobs:
           alr show "gnat_native=${CRATE_VERSION}"
           alr index --del=prunt_ci || true
 
-      - name: Ensure release exists
+      - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || \
-          gh release create "${RELEASE_TAG}" \
-            --target "${GITHUB_SHA}" \
-            --title "${RELEASE_NAME}" \
-            --notes "Built from Prunt3D/gcc commit ${GCC_COMMIT}"
-
-      - name: Upload release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${RELEASE_TAG}" ./dist/*.tar.gz ./dist/*.tar.gz.sha256 --clobber
+          python3 scripts/publish_release.py --tag "$RELEASE_TAG" \
+            --title "$RELEASE_NAME" --notes "Built from Prunt3D/gcc commit ${GCC_COMMIT}"
 
       - name: Publish index branch
         env:

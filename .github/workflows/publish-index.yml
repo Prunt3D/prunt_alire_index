@@ -1,0 +1,35 @@
+name: Publish index changes
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "index/**"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: alire-index-publication
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - uses: alire-project/setup-alire@v5
+        with:
+          version: 2.1.0
+          toolchain: --disable-assistant
+      - name: Validate index changes
+        run: |
+          alr -n index --add="$PWD" --name=prunt_ci --before=community
+          alr -n index --check
+      - name: Publish without rebuilding packages
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO_SLUG: ${{ github.repository }}
+          CRATE_VERSION: index-only update
+        run: ./scripts/export_index_branch.sh --branch alire-index --push

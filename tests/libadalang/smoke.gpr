@@ -1,0 +1,11 @@
+with "libadalang.gpr";
+with "langkit_support.gpr";
+with "vss_text.gpr";
+
+project Smoke is
+   for Source_Dirs use ("src");
+   for Object_Dir use "obj";
+   for Exec_Dir use "bin";
+   for Main use ("smoke.adb");
+   for Create_Missing_Dirs use "True";
+end Smoke;

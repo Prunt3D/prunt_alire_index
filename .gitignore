@@ -7,3 +7,6 @@ dist/
 smoke-test/
 stage/
 tmp/
+/libadalang/alire/
+/libadalang/config/
+/libadalang/obj/
