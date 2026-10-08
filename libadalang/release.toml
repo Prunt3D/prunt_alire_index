@@ -1,2 +1,2 @@
 # Increment for every published change, including compiler/dependency updates.
-crate_version = "26.0.1001"
+crate_version = "26.0.1002"

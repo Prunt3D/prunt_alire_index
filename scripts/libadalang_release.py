@@ -86,8 +86,7 @@ notes = "Static Ada libraries built with Prunt GNAT {meta['GNAT_VERSION']}; requ
 disabled = true
 
 [[depends-on]]
-gnat_native = "={meta['GNAT_VERSION']}"
-gnat = "={meta['GNAT_VERSION']}"
+gnat = "*"
 libgmp = "*"
 
 # Prevent a second copy of any bundled Ada library in the same solution.

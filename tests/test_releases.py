@@ -78,13 +78,12 @@ class ReleaseTests(unittest.TestCase):
                     publisher.publish("owner/repo", "tag", "title", "notes", "commit", dist)
                 self.assertEqual(gh.call_count, 1)
 
-    def test_binary_manifest_pins_compiler_and_replaces_entire_library_closure(self):
+    def test_binary_manifest_allows_any_compiler_and_replaces_entire_library_closure(self):
         data = tomllib.loads(libadalang.manifest({
             "x86_64": ("https://example.com/x86.tar.gz", "a" * 64),
             "aarch64": ("https://example.com/arm.tar.gz", "b" * 64),
         }))
-        self.assertEqual(data["depends-on"][0]["gnat_native"], "=16.2.1001")
-        self.assertEqual(data["depends-on"][0]["gnat"], "=16.2.1001")
+        self.assertEqual(data["depends-on"], [{"gnat": "*", "libgmp": "*"}])
         self.assertEqual(set(data["forbids"][0]), set(libadalang.LIBRARIES))
         self.assertIn("vss_text=26.2.0", data["provides"])
         self.assertTrue(data["configuration"]["disabled"])
@@ -101,7 +100,7 @@ class ReleaseTests(unittest.TestCase):
     def test_libadalang_metadata_does_not_need_gcc_checkout_or_release(self):
         with patch.object(gcc, "metadata", side_effect=AssertionError("Must not inspect GCC")):
             self.assertEqual(libadalang.metadata("owner/repo", "aarch64")["GNAT_VERSION"],
-                             "16.2.1001")
+                             "16.2.1002")
 
     def test_gcc_metadata_without_initialized_submodule(self):
         with tempfile.TemporaryDirectory() as directory:

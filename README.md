@@ -22,7 +22,7 @@ Only GCC builders need to initialize the `gcc/` submodule.
 
 Changes to GCC build scripts or compiler packaging require a version bump in
 root `release.toml` to produce a new compiler release. Editing a shared script
-does not rebuild GNAT. Libadalang's compiler version is pinned independently;
+does not rebuild GNAT. Libadalang's build compiler version is pinned independently;
 releasing a new GCC does not automatically rebuild Libadalang. To adopt it,
 update the compiler dependencies in `libadalang/alire.toml` and increment
 `libadalang/release.toml` in the same commit, after the GNAT release is published.
@@ -69,8 +69,10 @@ library dependency closure, installed GPR projects, ALI metadata, interface and
 generic-body sources, and upstream license notices. It includes Prunt's pinned
 LibGPR, GPR2 and Langkit Support forks, and VSS Text 26.2.0. The compiler is
 downloaded from the existing index; GCC is neither checked out nor compiled by
-this workflow. The initial bundle requires Prunt GNAT 16.2.1001, matching the
-current Prunt `config_codegen` build.
+this workflow. The bundle is built with Prunt GNAT 16.2.1002, but its published
+manifest accepts any GNAT version or provider. The build compiler pin is only
+for reproducibility; consumers select their own compiler. Binary compatibility
+with other compiler versions is not guaranteed by this unconstrained dependency.
 
 All bundled Ada libraries are static and marked externally built. System GMP
 remains a dependency (`libgmp-dev` on Ubuntu); this is not a fully static libc/GMP

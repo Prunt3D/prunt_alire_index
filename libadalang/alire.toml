@@ -11,9 +11,9 @@ disabled = true
 
 [[depends-on]]
 # Deliberately independent of ../release.toml: consume an already released GNAT.
-# Keep this aligned with Prunt's config_codegen compiler.
-gnat_native = "=16.2.1001"
-gnat = "=16.2.1001"
+# Pin the build compiler for reproducibility, not the consumer's compiler.
+gnat_native = "=16.2.1002"
+gnat = "=16.2.1002"
 gprbuild = "=25.0.1"
 libadalang = "=26.0.0"
 gnatcoll = "=26.0.0"
