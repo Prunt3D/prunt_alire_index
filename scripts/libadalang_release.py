@@ -137,6 +137,16 @@ def verify_inputs(crate: Path) -> None:
             raise ValueError(f"Build does not use the required version of {name}")
 
 
+def quiet_iconv_linker(stage: Path) -> None:
+    # GNATCOLL Iconv's Alire manifest sets GNATCOLL_ICONV_OPT to "-v".
+    # Gprinstall embeds it in Linker_Options, making every consumer link verbose.
+    # Clear only that verbosity-only list, preserving real library options.
+    project = stage / "share/gpr/gnatcoll_iconv.gpr"
+    project.write_text(re.sub(
+        r'(for\s+Linker_Options\s+use\s*)\(\s*"-v"\s*\)(\s*;)',
+        r'\g<1>()\g<2>', project.read_text(), flags=re.I))
+
+
 def install(crate: Path, stage: Path) -> None:
     if stage.exists():
         raise ValueError(f"Stage already exists; use a new directory: {stage}")
@@ -147,6 +157,8 @@ def install(crate: Path, stage: Path) -> None:
     run("alr", "-n", f"--chdir={crate}", "exec", "--", "gprinstall",
         "-P", "libadalang.gpr", "-r", "-p", "-f", "--mode=dev", "--no-build-var",
         f"--prefix={stage}", *(f"-X{var}=static" for var in STATIC_VARIABLES))
+
+    quiet_iconv_linker(stage)
 
     # XML/Ada installs this source-free aggregate as an artifact, bypassing
     # gprinstall's usual Externally_Built attribute generation.
