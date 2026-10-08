@@ -1,0 +1,47 @@
+name = "libadalang_prebuilt"
+version = "26.0.1003"
+description = "Prebuilt static Libadalang and its Ada dependencies for Prunt"
+website = "https://github.com/Prunt3D/prunt_alire_index"
+maintainers = ["Liam Powell <liam@liampwll.com>"]
+maintainers-logins = ["liampwll"]
+licenses = "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND GPL-3.0-or-later WITH GCC-exception-3.1"
+provides = ["libadalang=26.0.0", "langkit_support=26.0.0", "adasat=26.0.0", "prettier_ada=26.0.0", "vss_text=26.2.0", "gnatcoll=26.0.0", "gnatcoll_minimal=26.0.0", "gnatcoll_projects=26.0.0", "gnatcoll_gmp=26.0.0", "gnatcoll_iconv=26.0.0", "libgpr=26.0.0", "libgpr2=26.0.0", "xmlada=26.0.0"]
+project-files = ["share/gpr/libadalang.gpr", "share/gpr/langkit_support.gpr", "share/gpr/vss_text.gpr"]
+notes = "Static Ada libraries built with Prunt GNAT 16.2.1002; requires system GMP and glibc."
+
+[configuration]
+disabled = true
+
+[[depends-on]]
+gnat = "*"
+libgmp = "*"
+
+# Prevent a second copy of any bundled Ada library in the same solution.
+[[forbids]]
+libadalang = "*"
+langkit_support = "*"
+adasat = "*"
+prettier_ada = "*"
+vss_text = "*"
+gnatcoll = "*"
+gnatcoll_minimal = "*"
+gnatcoll_projects = "*"
+gnatcoll_gmp = "*"
+gnatcoll_iconv = "*"
+libgpr = "*"
+libgpr2 = "*"
+xmlada = "*"
+
+[available."case(os)"]
+linux = true
+"..." = false
+
+[origin."case(os)".linux."case(host-arch)".x86-64]
+binary = true
+url = "https://github.com/Prunt3D/prunt_alire_index/releases/download/libadalang-static-26.0.1003/libadalang-static-x86_64-linux-26.0.1003.tar.gz"
+hashes = ["sha256:1bfcb39014fe717f94d9b5262d327e9a19f9e86d1f103491b5ef1f86598a72b5"]
+
+[origin."case(os)".linux."case(host-arch)".aarch64]
+binary = true
+url = "https://github.com/Prunt3D/prunt_alire_index/releases/download/libadalang-static-26.0.1003/libadalang-static-aarch64-linux-26.0.1003.tar.gz"
+hashes = ["sha256:94a5fae7963f3f8ec435ffba2c151ed92bffc3f423847af9748559f1063061d6"]
