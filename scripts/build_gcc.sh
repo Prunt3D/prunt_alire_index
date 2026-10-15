@@ -51,6 +51,7 @@ fi
 
 unset ADA_INCLUDE_PATH
 unset ADA_OBJECT_PATH
+unset ADA_OBJECTS_PATH
 
 for tool in gnat gnatmake gnatbind; do
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -72,9 +73,12 @@ if [[ "${PACKAGE_ARCH:-}" == "aarch64" ]]; then
   )
 fi
 
-"$SOURCE_DIR/configure" \
+# Host tools may be linked by an older bootstrap compiler. Make them use the
+# runtime's native code instead of trying to read the new compiler's bytecode.
+LDFLAGS="${LDFLAGS:-} -fno-lto" "$SOURCE_DIR/configure" \
   "${CONFIGURE_PLATFORM_ARGS[@]}" \
   --enable-languages=c,ada,fortran \
+  --enable-lto \
   --disable-multilib \
   --disable-bootstrap \
   --enable-checking=yes,extra,rtl
@@ -84,6 +88,10 @@ if [[ "$CONFIGURE_ONLY" == "1" ]]; then
   exit 0
 fi
 
-make "-j${JOBS}"
-make "-j${JOBS}" "DESTDIR=${STAGE_DIR}" install
+# Build the static Ada runtimes with both LTO bytecode and native code. GCC's
+# shared-runtime build appends -fno-lto itself. GNATLIBCFLAGS reaches both the
+# Ada units and the C support code; CFLAGS_FOR_TARGET alone misses the Ada units.
+RUNTIME_FLAGS="-g -O2 -flto -ffat-lto-objects"
+make "-j${JOBS}" "GNATLIBCFLAGS=${RUNTIME_FLAGS}"
+make "-j${JOBS}" "GNATLIBCFLAGS=${RUNTIME_FLAGS}" "DESTDIR=${STAGE_DIR}" install
 popd >/dev/null

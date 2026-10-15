@@ -62,6 +62,44 @@ Review and push the resulting commit. GitHub Actions then builds GCC out of
 tree, smoke-tests it, uploads release assets, regenerates the index manifest,
 and publishes the updated manifest to `alire-index`.
 
+## Ada runtime LTO
+
+Starting with GNAT 16.2.1004, the normal static `libgnat.a` and `libgnarl.a`
+include LTO bytecode as well as native code. The build passes
+`GNATLIBCFLAGS="-g -O2 -flto -ffat-lto-objects"` to both build and install;
+setting only `CFLAGS_FOR_TARGET` would not enable LTO for the Ada units.
+GCC continues to build the shared runtimes without LTO. Host tools link with
+`-fno-lto` so an older bootstrap compiler can use the runtime's native code
+without attempting to read the new compiler's bytecode.
+
+Applications can use the default runtime with `-flto` at compilation and link
+time, without rebuilding it or selecting a separate `--RTS`. For example:
+
+```bash
+gnatmake main.adb -cargs -O3 -flto -largs -O3 -flto
+```
+
+For GPRbuild, add these options to both the Ada compiler and linker switches.
+LTO across the runtime requires static runtime linkage, which is GNAT's default
+for executables. An explicitly shared runtime remains an optimization boundary.
+Applications that do not enable LTO still work; `-fno-lto` at link time selects
+the native-code path explicitly. Use the runtime's matching packaged compiler
+for LTO, since GCC bytecode is compiler-version-specific.
+
+LTO does not guarantee inlining across different exception-handling settings.
+GNAT builds its runtime with checks suppressed. In an unchecked release build,
+also compile the application with `-gnatp` to match those settings; the
+half-power smoke test then inlines to a square-root intrinsic. Checked builds
+still work with LTO, but GCC may retain the math wrapper call. The toolchain
+does not suppress application checks by default.
+
+Both architecture builds check the installed archives for bytecode and native
+code, then compile and run clients without LTO, with LTO and checks enabled,
+and with LTO and `-gnatp`. These exercise tasking, math, and exception handling.
+The unchecked LTO test also inspects a small math client's final optimized
+code to verify inlining. These checks run against the staged installation
+before packaging.
+
 ## Static Libadalang
 
 The `libadalang_prebuilt` crate contains Libadalang 26.0.0, its complete Ada

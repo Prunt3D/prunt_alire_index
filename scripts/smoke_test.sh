@@ -99,3 +99,6 @@ if [[ "$fortran_output" != "Hello, Fortran!" ]]; then
   echo "Unexpected Fortran smoke test output: $fortran_output" >&2
   exit 1
 fi
+
+python3 "$(dirname "$0")/smoke_test_lto.py" \
+  --prefix "$STAGE_DIR/usr/local" --test-dir "$TEST_DIR/runtime-lto"
