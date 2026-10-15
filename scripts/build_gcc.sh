@@ -2,6 +2,7 @@
 set -euo pipefail
 
 JOBS="$(nproc)"
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 SOURCE_DIR="./gcc"
 WORK_DIR="./build"
 STAGE_DIR="./stage"
@@ -45,6 +46,10 @@ if [[ ! -x "$SOURCE_DIR/configure" ]]; then
   exit 1
 fi
 
+# GCC resolves build configurations relative to its source config/ directory.
+RUNTIME_BUILD_CONFIG="$(realpath --relative-to="$SOURCE_DIR/config" "$SCRIPT_DIR/gcc-runtime-lto.mk")"
+RUNTIME_BUILD_CONFIG="${RUNTIME_BUILD_CONFIG%.mk}"
+
 if [[ -n "${ALIRE_GNAT_BIN:-}" ]]; then
   export PATH="${ALIRE_GNAT_BIN}:$PATH"
 fi
@@ -79,6 +84,7 @@ LDFLAGS="${LDFLAGS:-} -fno-lto" "$SOURCE_DIR/configure" \
   "${CONFIGURE_PLATFORM_ARGS[@]}" \
   --enable-languages=c,ada,fortran \
   --enable-lto \
+  "--with-build-config=${RUNTIME_BUILD_CONFIG}" \
   --disable-multilib \
   --disable-bootstrap \
   --enable-checking=yes,extra,rtl
@@ -88,10 +94,6 @@ if [[ "$CONFIGURE_ONLY" == "1" ]]; then
   exit 0
 fi
 
-# Build the static Ada runtimes with both LTO bytecode and native code. GCC's
-# shared-runtime build appends -fno-lto itself. GNATLIBCFLAGS reaches both the
-# Ada units and the C support code; CFLAGS_FOR_TARGET alone misses the Ada units.
-RUNTIME_FLAGS="-g -O2 -flto -ffat-lto-objects"
-make "-j${JOBS}" "GNATLIBCFLAGS=${RUNTIME_FLAGS}"
-make "-j${JOBS}" "GNATLIBCFLAGS=${RUNTIME_FLAGS}" "DESTDIR=${STAGE_DIR}" install
+make "-j${JOBS}"
+make "-j${JOBS}" "DESTDIR=${STAGE_DIR}" install
 popd >/dev/null

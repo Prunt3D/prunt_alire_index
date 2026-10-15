@@ -64,10 +64,12 @@ and publishes the updated manifest to `alire-index`.
 
 ## Ada runtime LTO
 
-Starting with GNAT 16.2.1004, the normal static `libgnat.a` and `libgnarl.a`
-include LTO bytecode as well as native code. The build passes
-`GNATLIBCFLAGS="-g -O2 -flto -ffat-lto-objects"` to both build and install;
-setting only `CFLAGS_FOR_TARGET` would not enable LTO for the Ada units.
+Starting with GNAT 16.2.1005, the normal static `libgnat.a` and `libgnarl.a`
+include LTO bytecode as well as native code. The GCC build configuration in
+`scripts/gcc-runtime-lto.mk` forwards
+`GNATLIBCFLAGS="-g -O2 -flto -ffat-lto-objects"` through both build and install.
+Setting this variable only on the top-level make command does not work because
+GCC clears `MAKEOVERRIDES`; setting only `CFLAGS_FOR_TARGET` misses the Ada units.
 GCC continues to build the shared runtimes without LTO. Host tools link with
 `-fno-lto` so an older bootstrap compiler can use the runtime's native code
 without attempting to read the new compiler's bytecode.
