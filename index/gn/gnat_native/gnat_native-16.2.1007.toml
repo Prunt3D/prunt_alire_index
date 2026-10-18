@@ -1,0 +1,31 @@
+name = "gnat_native"
+version = "16.2.1007"
+provides = ["gnat=16.2.1007"]
+description = "GCC with C, Ada, and Fortran enabled, plus backports"
+website = "https://github.com/Prunt3D/gcc"
+maintainers = ["Liam Powell <liam@liampwll.com>"]
+maintainers-logins = ["liampwll"]
+licenses = "GPL-3.0-or-later AND GPL-3.0-or-later WITH GCC-exception-3.1"
+auto-gpr-with = false
+notes = "Built from GCC 16.2.1007 commit ec3e496885d0dd2028c9043536247fda105f7298"
+
+[configuration]
+disabled = true
+
+[environment."case(os)".linux]
+PATH.prepend = "${CRATE_ROOT}/local/bin"
+LIBRARY_PATH.prepend = "${CRATE_ROOT}/local/lib64"
+LD_LIBRARY_PATH.prepend = "${CRATE_ROOT}/local/lib64"
+LD_RUN_PATH.prepend = "${CRATE_ROOT}/local/lib64"
+
+
+[origin."case(os)".linux."case(host-arch)".x86-64]
+binary = true
+url = "https://github.com/Prunt3D/prunt_alire_index/releases/download/gnat-16.2.1007/gnat-x86_64-linux-16.2.1007.tar.gz"
+hashes = ["sha256:d7f7379920068a57f2bdad843a510c48f30068fff154e6826e6bfc21eb1af401"]
+
+
+[origin."case(os)".linux."case(host-arch)".aarch64]
+binary = true
+url = "https://github.com/Prunt3D/prunt_alire_index/releases/download/gnat-16.2.1007/gnat-aarch64-linux-16.2.1007.tar.gz"
+hashes = ["sha256:e2720215552a0e9ee40e429da86791fd7c9875f088e7bab8f90500e403e5ffc6"]
