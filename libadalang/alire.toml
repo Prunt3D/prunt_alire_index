@@ -10,10 +10,8 @@ project-files = ["libadalang_build.gpr"]
 disabled = true
 
 [[depends-on]]
-# Deliberately independent of ../release.toml: consume an already released GNAT.
-# Pin the build compiler for reproducibility, not the consumer's compiler.
-gnat_native = "=16.2.1006"
-gnat = "=16.2.1006"
+gnat_native = "=16.2.1007"
+gnat = "=16.2.1007"
 gprbuild = "=25.0.1"
 libadalang = "=26.0.0"
 gnatcoll = "=26.0.0"
