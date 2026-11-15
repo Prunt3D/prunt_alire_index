@@ -175,6 +175,12 @@ def compiler_prefix() -> Path:
     return Path(gcc).resolve().parent.parent
 
 
+def compiler_commit(release: dict) -> str | None:
+    """The GCC commit which a gnat_native manifest says its compiler was built from."""
+    match = re.fullmatch(r"Built from GCC \S+ commit ([0-9a-f]{40})", release.get("notes", ""))
+    return match.group(1) if match else None
+
+
 def verify_compiler(prefix: Path) -> None:
     """The bundled compiler and gnat2why's front end must come from the gcc submodule's commit."""
     meta = metadata()
@@ -182,10 +188,26 @@ def verify_compiler(prefix: Path) -> None:
     release = read_toml(manifest_file)
     if release.get("name") != "gnat_native" or release.get("version") != meta["GNAT_VERSION"]:
         raise ValueError(f"{manifest_file} is not gnat_native {meta['GNAT_VERSION']}")
-    match = re.fullmatch(r"Built from GCC \S+ commit ([0-9a-f]{40})", release.get("notes", ""))
-    if not match or match.group(1) != meta["GCC_COMMIT"]:
+    if compiler_commit(release) != meta["GCC_COMMIT"]:
         raise ValueError(f"gnat_native {meta['GNAT_VERSION']} was not built from gcc submodule commit "
                          f"{meta['GCC_COMMIT']}: {release.get('notes')!r}")
+
+
+def check_compiler_published(index_ref: str) -> None:
+    """Refuse to start before the gnat_native release which the archive bundles is in the published index.
+
+    A push which releases a compiler and a GNATprove built on it starts both workflows at once, and this one would
+    otherwise fail later, when Alire cannot find the compiler."""
+    meta = metadata()
+    path = f"index/gn/gnat_native/gnat_native-{meta['GNAT_VERSION']}.toml"
+    shown = subprocess.run(["git", "show", f"{index_ref}:{path}"], cwd=ROOT, capture_output=True, text=True)
+    if shown.returncode != 0:
+        raise SystemExit(f"gnat_native {meta['GNAT_VERSION']} is not in the published index ({index_ref}) yet. "
+                         "This GNATprove bundles it, so run this workflow again once Build GCC has published it.")
+    commit = compiler_commit(tomllib.loads(shown.stdout))
+    if commit != meta["GCC_COMMIT"]:
+        raise SystemExit(f"The published gnat_native {meta['GNAT_VERSION']} was built from GCC commit {commit}, "
+                         f"not from the gcc submodule's {meta['GCC_COMMIT']}.")
 
 
 def build_gnat2why(jobs: int) -> Path:
@@ -432,6 +454,9 @@ def main() -> None:
     build_parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
     build_parser.add_argument("--reuse-gnat2why", action="store_true",
                               help="Package the gnat2why already built in spark2014/install (local development only)")
+    check_parser = sub.add_parser("check-compiler")
+    check_parser.add_argument("--index-ref", required=True,
+                              help="Git revision of the published index branch, such as FETCH_HEAD")
     gen_parser = sub.add_parser("manifest")
     gen_parser.add_argument("--dist", type=Path, default=ROOT / "dist")
     gen_parser.add_argument("--repo-slug")
@@ -442,6 +467,9 @@ def main() -> None:
             release_metadata.emit_github_env(values)
         else:
             print(json.dumps(values, indent=2))
+    elif args.command == "check-compiler":
+        check_compiler_published(args.index_ref)
+        print(f"gnat_native {metadata()['GNAT_VERSION']} is published")
     elif args.command == "build":
         meta = metadata()
         if args.reuse_gnat2why:

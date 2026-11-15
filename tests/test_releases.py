@@ -247,6 +247,28 @@ class ReleaseTests(unittest.TestCase):
                 "lib64/libgmp.so.10": "spark:lib64/libgmp.so.10",
             })
 
+    def test_gnatprove_waits_for_the_compiler_it_bundles_to_be_published(self):
+        meta = gnatprove.metadata()
+
+        def published(returncode, commit=None):
+            manifest = (f'name = "gnat_native"\nversion = "{meta["GNAT_VERSION"]}"\n'
+                        f'notes = "Built from GCC {meta["GNAT_VERSION"]} commit {commit}"\n')
+            return subprocess.CompletedProcess([], returncode, manifest if returncode == 0 else "", "")
+
+        for answer, message in ((published(128), "not in the published index"),
+                                (published(0, "1" * 40), "built from GCC commit"),
+                                (published(0, meta["GCC_COMMIT"]), None)):
+            with self.subTest(message=message), patch.object(gnatprove, "metadata", return_value=meta), \
+                 patch.object(gnatprove.subprocess, "run", return_value=answer) as run:
+                if message:
+                    with self.assertRaisesRegex(SystemExit, message):
+                        gnatprove.check_compiler_published("FETCH_HEAD")
+                else:
+                    gnatprove.check_compiler_published("FETCH_HEAD")
+                self.assertEqual(run.call_args.args[0], [
+                    "git", "show",
+                    f"FETCH_HEAD:index/gn/gnat_native/gnat_native-{meta['GNAT_VERSION']}.toml"])
+
     def test_colibri_is_pinned_only_where_cea_publishes_it(self):
         x86 = gnatprove.colibri_release("x86_64")
         self.assertRegex(x86["sha256"], r"^[0-9a-f]{64}$")

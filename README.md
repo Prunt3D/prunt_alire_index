@@ -11,7 +11,9 @@ dimension of a range-constrained dimensioned subtype). The `gnatprove` crate her
 end, and with that compiler, as released in `gnat_native`, in place of the bundled GCC. The driver, Why3, the
 provers and SPARKlib are unchanged. `scripts/gnatprove_release.py build` builds and packages it; it refuses a
 `gnat_native` release which was not built from the `gcc` submodule's commit, so a compiler update needs a new
-`gnatprove` release too.
+`gnatprove` release too, pinned to the new `gnat_native` in `gnatprove/alire.toml`. Its workflow also refuses to
+start until that compiler is in the published index: push the compiler release first, or run the GNATprove
+workflow again once Build GCC has published it.
 
 The x86-64 archive also contains COLIBRI, a prover which GNATprove supports but does not bundle, from CEA's
 release bundle pinned in `gnatprove/release.toml`, under `libexec/spark/colibri`. GNATprove's proof levels do not
