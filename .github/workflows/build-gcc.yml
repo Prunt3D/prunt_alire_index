@@ -44,7 +44,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
-          submodules: recursive
+          submodules: false
+
+      - name: Checkout GCC
+        # Only the GCC submodule: spark2014 and its Why3 submodule are for the GNATprove build.
+        run: git submodule update --init gcc
 
       - name: Install build prerequisites
         run: |
