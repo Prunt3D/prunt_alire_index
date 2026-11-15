@@ -1,0 +1,30 @@
+name = "gnatprove"
+version = "16.2.1001"
+authors = ["AdaCore"]
+description = "Automatic formal verification of SPARK code"
+website = "https://github.com/Prunt3D/prunt_alire_index"
+maintainers = ["Liam Powell <liam@liampwll.com>"]
+maintainers-logins = ["liampwll"]
+licenses = "GPL-3.0-or-later AND LGPL-2.1-or-later"
+auto-gpr-with = false
+notes = "GNATprove 16.1.0-1 with gnat2why from spark2014 commit 42554fc241fcd1fdf08d3a2feccb3f86912acbc0 and the compiler of Prunt GNAT 16.2.1008 (GCC commit 48b2d984dbcb74e4403bbd394999780b46fee2f5); COLIBRI 2026.06 on x86-64"
+
+[configuration]
+disabled = true
+
+[environment]
+PATH.prepend = "${CRATE_ROOT}/bin"
+
+[available."case(os)"]
+linux = true
+"..." = false
+
+[origin."case(os)".linux."case(host-arch)".x86-64]
+binary = true
+url = "https://github.com/Prunt3D/prunt_alire_index/releases/download/gnatprove-16.2.1001/gnatprove-x86_64-linux-16.2.1001.tar.gz"
+hashes = ["sha256:0dc8227881d828afd8d2efb898b39bb6f1b796de5f139c5681b89e13c925ca19"]
+
+[origin."case(os)".linux."case(host-arch)".aarch64]
+binary = true
+url = "https://github.com/Prunt3D/prunt_alire_index/releases/download/gnatprove-16.2.1001/gnatprove-aarch64-linux-16.2.1001.tar.gz"
+hashes = ["sha256:1e2106039e2831b98de1d9c1e17f6e4a36343b2a9a1de3a53577e506df5b6e32"]
