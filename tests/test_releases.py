@@ -372,6 +372,22 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(any(fnmatch.fnmatchcase(path, pattern)
                                      for pattern in trigger["paths"]), expected)
 
+    def test_steps_do_not_read_the_metadata_they_write_to_github_env(self):
+        # GitHub applies GITHUB_ENV only to later steps, so the writing step would see empty values.
+        names = set()
+        for module in (gcc, gnatprove, libadalang):
+            names.update(module.metadata("owner/repo", "x86_64"))
+        for path in sorted((ROOT / ".github/workflows").glob("*.yml")):
+            workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+            for job_name, job in workflow["jobs"].items():
+                for step in job["steps"]:
+                    script = step.get("run", "")
+                    if "GITHUB_ENV" not in script:
+                        continue
+                    with self.subTest(workflow=path.name, job=job_name, step=step.get("name")):
+                        self.assertEqual([name for name in sorted(names)
+                                          if f"${name}" in script or f"${{{name}}}" in script], [])
+
     def test_publish_jobs_serialize_index_updates(self):
         groups = []
         for name in ("build-gcc.yml", "build-libadalang.yml", "build-gnatprove.yml", "publish-index.yml"):

@@ -99,9 +99,11 @@ jobs:
           pattern: gnatprove-*-${{ github.sha }}
           path: dist
           merge-multiple: true
+      - name: Load release metadata
+        # Variables written to GITHUB_ENV exist only in later steps.
+        run: python3 scripts/gnatprove_release.py metadata --format github-env >> "$GITHUB_ENV"
       - name: Generate and validate the index manifest
         run: |
-          python3 scripts/gnatprove_release.py metadata --format github-env >> "$GITHUB_ENV"
           python3 scripts/gnatprove_release.py manifest --repo-slug "$GITHUB_REPOSITORY"
           alr -n index --add="$PWD" --name=prunt_ci --before=community
           alr -n index --check
