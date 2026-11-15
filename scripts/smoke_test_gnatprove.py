@@ -58,6 +58,15 @@ gnat_native = "={meta['GNAT_VERSION']}"
             print(output)
             if "Success: all checks proved" not in output or "postcondition proved" not in output:
                 raise ValueError("GNATprove did not prove Dims.Travel")
+            if release.colibri_release(meta["PACKAGE_ARCH"]):
+                # A steps limit makes GNATprove use the COLIBRI arguments which differ from the released ones.
+                result = alr("exec", "--", "gnatprove", "-P", "smoke.gpr", "-f", "--prover=colibri",
+                             "--steps=100000", "--checks-as-errors=on", "--report=provers",
+                             capture_output=True, text=True)
+                output = result.stdout + result.stderr
+                print(output)
+                if "postcondition proved (colibri" not in output:
+                    raise ValueError("COLIBRI did not prove Dims.Travel")
             representation = consumer / "obj/gnatprove/data_representation_generation.log"
             if representation.exists() and "error" in representation.read_text():
                 raise ValueError(f"Bundled compiler rejected the sources:\n{representation.read_text()}")

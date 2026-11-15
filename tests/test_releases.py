@@ -1,9 +1,13 @@
 import fnmatch
+import hashlib
+import io
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import tomllib
 import unittest
@@ -242,6 +246,94 @@ class ReleaseTests(unittest.TestCase):
                 "lib64/libgcc_s.so.1": "prefix:lib64/libgcc_s.so.1",
                 "lib64/libgmp.so.10": "spark:lib64/libgmp.so.10",
             })
+
+    def test_colibri_is_pinned_only_where_cea_publishes_it(self):
+        x86 = gnatprove.colibri_release("x86_64")
+        self.assertRegex(x86["sha256"], r"^[0-9a-f]{64}$")
+        self.assertIn(x86["version"], x86["url"])
+        self.assertTrue(x86["mirror"].startswith("https://zenodo.org/"))
+        self.assertTrue(x86["license"].startswith("LGPL-2.1"))
+        self.assertIsNone(gnatprove.colibri_release("aarch64"))
+
+    def test_gnatprove_manifest_declares_bundled_colibri(self):
+        data = tomllib.loads(gnatprove.manifest({
+            "x86_64": ("https://example.com/x86.tar.gz", "a" * 64),
+            "aarch64": ("https://example.com/arm.tar.gz", "b" * 64),
+        }))
+        colibri = gnatprove.colibri_release("x86_64")
+        self.assertEqual(data["licenses"], f"GPL-3.0-or-later AND {colibri['license']}")
+        self.assertIn(f"COLIBRI {colibri['version']} on x86-64", data["notes"])
+        self.assertNotIn("aarch64", data["notes"].split("COLIBRI")[1])
+
+    def test_fetch_falls_back_to_the_mirror_and_checks_the_file(self):
+        good, bad = b"bundle", b"<html>bot check</html>"
+        digest = hashlib.sha256(good).hexdigest()
+        release = {"url": "https://primary.example/bundle", "mirror": "https://mirror.example/bundle",
+                   "file": "bundle.tbz", "sha256": digest}
+
+        def opener(responses):
+            def urlopen(url):
+                answer = responses[url]
+                if isinstance(answer, Exception):
+                    raise answer
+                return io.BytesIO(answer)
+            return urlopen
+
+        for primary in (OSError("refused"), bad):
+            with self.subTest(primary=primary), tempfile.TemporaryDirectory() as directory, \
+                 patch.object(gnatprove.urllib.request, "urlopen",
+                              opener({release["url"]: primary, release["mirror"]: good})):
+                self.assertEqual(gnatprove.fetch(release, Path(directory)).read_bytes(), good)
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(gnatprove.urllib.request, "urlopen",
+                          opener({release["url"]: bad, release["mirror"]: bad})):
+            with self.assertRaisesRegex(ValueError, "Could not download"):
+                gnatprove.fetch(release, Path(directory))
+
+    def test_colibri_gets_the_arguments_of_public_releases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            conf = Path(directory) / "gnatprove.conf"
+            other = {"name": "altergo", "args": ["%f"], "args_steps": ["--steps-bound", "%S"]}
+            conf.write_text(json.dumps({"magic": 14, "provers": [
+                other, {"name": "colibri", "args": ["--memlimit", "%m", "%f"],
+                        "args_steps": ["--steplimit", "%S"], "version": "2137"}]}))
+            gnatprove.configure_colibri(conf)
+            data = json.loads(conf.read_text())
+        self.assertEqual(data["magic"], 14)
+        self.assertEqual(data["provers"][0], other)
+        self.assertEqual(data["provers"][1], {"name": "colibri", "args": gnatprove.COLIBRI_ARGS,
+                                              "args_steps": gnatprove.COLIBRI_ARGS_STEPS, "version": "2137"})
+        self.assertIn("%f", gnatprove.COLIBRI_ARGS)
+
+    def test_colibri_bundle_loses_only_its_windows_parts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle_root = root / "bundle/colibri-1.0-v7"
+            files = {
+                "colibri": b"launcher", "colibri.exe": b"launcher", "version": b"1.0",
+                "COLIBRI/lib/v7/x86_64_linux/float_util.so": b"linux library",
+                "COLIBRI/lib/v7/x86_64_nt/float_util.dll": b"MZ windows library",
+                "ECLIPSE/lib/x86_64_linux/eclipse.exe": b"linux engine",
+                "ECLIPSE/lib/x86_64_nt/eclipse.exe": b"MZ windows engine",
+                "COLIBRI/filter_smtlib_file.exe": b"MZ windows tool",
+            }
+            for name, content in files.items():
+                (bundle_root / name).parent.mkdir(parents=True, exist_ok=True)
+                (bundle_root / name).write_bytes(content)
+            bundle = root / "bundle.tbz"
+            with tarfile.open(bundle, "w:bz2") as archive:
+                archive.add(bundle_root, arcname=bundle_root.name)
+            spark = root / "spark"
+            (spark / "bin").mkdir(parents=True)
+            target = gnatprove.install_colibri(spark, bundle)
+            kept = {str(path.relative_to(target)) for path in target.rglob("*") if path.is_file()}
+            self.assertEqual(kept, {"colibri", "colibri.exe", "version",
+                                    "COLIBRI/lib/v7/x86_64_linux/float_util.so",
+                                    "ECLIPSE/lib/x86_64_linux/eclipse.exe"})
+            self.assertFalse(list(target.rglob("*_nt")))
+            launcher = spark / "bin/colibri"
+            self.assertEqual(os.readlink(launcher), "../colibri/colibri")
+            self.assertEqual(launcher.read_bytes(), b"launcher")
 
     def test_only_gnatprove_inputs_trigger_gnatprove_builds(self):
         workflow = yaml.load((ROOT / ".github/workflows/build-gnatprove.yml").read_text(),

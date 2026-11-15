@@ -13,6 +13,13 @@ provers and SPARKlib are unchanged. `scripts/gnatprove_release.py build` builds 
 `gnat_native` release which was not built from the `gcc` submodule's commit, so a compiler update needs a new
 `gnatprove` release too.
 
+The x86-64 archive also contains COLIBRI, a prover which GNATprove supports but does not bundle, from CEA's
+release bundle pinned in `gnatprove/release.toml`, under `libexec/spark/colibri`. GNATprove's proof levels do not
+use it; `--prover=colibri`, or `--prover=all`, does. Its ECLiPSe engine needs `libnsl.so.1`, which current glibc
+no longer provides, but uses nothing from it, so the archive puts an empty library of that name beside it. The
+entry for COLIBRI in `share/spark/config/gnatprove.conf` gets the arguments which public COLIBRI releases accept
+(`--max-steps` for a steps limit). CEA publishes no ARM64 build, so the aarch64 archive has no COLIBRI.
+
 ## Using the index
 
 Add this index to Alire ahead of the community index so its `gnat_native` release can satisfy compiler requirements:

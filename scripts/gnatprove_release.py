@@ -6,7 +6,8 @@ representations, so a released GNATprove analyses code with the front end it was
 accepts code which that front end rejects. This script builds gnat2why from the spark2014 submodule against the
 gcc submodule's front end, using the Prunt compiler released from that same commit, and puts it and that
 compiler into the released GNATprove archive named in gnatprove/release.toml. The driver, Why3, the provers and
-SPARKlib are the released ones.
+SPARKlib are the released ones. Where gnatprove/release.toml names a COLIBRI build for the architecture, the
+archive also gets that prover, which GNATprove supports but does not bundle.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import tempfile
 import tomllib
 import urllib.request
 
@@ -36,6 +38,15 @@ GNAT2WHY_DIR = SPARK_DIR / "gnat2why"
 # named after the target triplet (x86_64-pc-linux-gnu-gcc, ...) are replaced too.
 COMPILER_PROGRAMS = ("cpp", "gcc", "gcc-ar", "gcc-nm", "gcc-ranlib", "gnatbind", "gnatls")
 
+# How gnatprove runs COLIBRI. The released gnatprove.conf passes --steplimit, which public COLIBRI releases do
+# not have; these are the arguments upstream Why3 uses for them. --get-steps prints the "Steps : N" line which
+# Why3's colibri driver reads.
+COLIBRI_ARGS = ["--get-steps", "--memlimit", "%m", "%f"]
+COLIBRI_ARGS_STEPS = ["--max-steps", "%S"]
+
+# A problem COLIBRI must answer "unsat", to show that its Prolog engine loads.
+COLIBRI_CHECK = "(set-logic ALL)\n(declare-fun x () Int)\n(assert (and (> x 3) (< x 2)))\n(check-sat)\n"
+
 
 def read_toml(path: Path) -> dict:
     return tomllib.loads(path.read_text())
@@ -43,6 +54,15 @@ def read_toml(path: Path) -> dict:
 
 def release_config() -> dict:
     return read_toml(INPUTS / "release.toml")
+
+
+def colibri_release(arch: str) -> dict | None:
+    """The COLIBRI build to bundle for a package architecture, if there is one."""
+    colibri = release_config().get("colibri")
+    if colibri is None or arch not in colibri:
+        return None
+    return {"version": colibri["version"], "license": colibri["license"], "source": colibri["source"],
+            **colibri[arch]}
 
 
 def exact_version(name: str) -> str:
@@ -93,6 +113,14 @@ def metadata(repo_slug: str | None = None, arch: str | None = None) -> dict[str,
 def manifest(origins: dict[str, tuple[str, str]]) -> str:
     """Origins map package architectures to (URL, SHA256)."""
     meta = metadata()
+    colibri_arches = [arch for arch in origins if colibri_release(arch)]
+    licenses = "GPL-3.0-or-later"
+    colibri = ""
+    if colibri_arches:
+        release = colibri_release(colibri_arches[0])
+        licenses += f" AND {release['license']}"
+        hosts = ", ".join(release_metadata.PACKAGE_ARCHES[arch] for arch in colibri_arches)
+        colibri = f"; COLIBRI {release['version']} on {hosts}"
     text = f'''name = "gnatprove"
 version = "{meta['CRATE_VERSION']}"
 authors = ["AdaCore"]
@@ -100,9 +128,9 @@ description = "Automatic formal verification of SPARK code"
 website = "https://github.com/Prunt3D/prunt_alire_index"
 maintainers = ["Liam Powell <liam@liampwll.com>"]
 maintainers-logins = ["liampwll"]
-licenses = "GPL-3.0-or-later"
+licenses = "{licenses}"
 auto-gpr-with = false
-notes = "GNATprove {meta['BASE_VERSION']} with gnat2why from spark2014 commit {meta['SPARK_COMMIT']} and the compiler of Prunt GNAT {meta['GNAT_VERSION']} (GCC commit {meta['GCC_COMMIT']})"
+notes = "GNATprove {meta['BASE_VERSION']} with gnat2why from spark2014 commit {meta['SPARK_COMMIT']} and the compiler of Prunt GNAT {meta['GNAT_VERSION']} (GCC commit {meta['GCC_COMMIT']}){colibri}"
 
 [configuration]
 disabled = true
@@ -172,19 +200,31 @@ def build_gnat2why(jobs: int) -> Path:
     return SPARK_DIR / "install/bin/gnat2why"
 
 
-def fetch_base(arch: str, cache: Path) -> Path:
-    base = release_config()["base"][arch]
+def fetch(release: dict, cache: Path) -> Path:
+    """Download release["url"], or else release["mirror"], into cache and check it against release["sha256"]."""
     cache.mkdir(parents=True, exist_ok=True)
-    archive = cache / base["url"].rsplit("/", 1)[1]
-    if not archive.exists() or sha256(archive) != base["sha256"]:
+    archive = cache / release.get("file", release["url"].rsplit("/", 1)[1])
+    if archive.exists() and sha256(archive) == release["sha256"]:
+        return archive
+    for url in (release["url"], *([release["mirror"]] if "mirror" in release else [])):
         partial = archive.with_name(archive.name + ".part")
-        print(f"+ download {base['url']}", flush=True)
-        with urllib.request.urlopen(base["url"]) as response, partial.open("wb") as stream:
-            shutil.copyfileobj(response, stream)
-        partial.replace(archive)
-    if sha256(archive) != base["sha256"]:
-        raise ValueError(f"Checksum mismatch for the released GNATprove: {archive}")
-    return archive
+        print(f"+ download {url}", flush=True)
+        try:
+            with urllib.request.urlopen(url) as response, partial.open("wb") as stream:
+                shutil.copyfileobj(response, stream)
+        except OSError as error:
+            print(f"  failed: {error}", flush=True)
+            continue
+        if sha256(partial) == release["sha256"]:
+            partial.replace(archive)
+            return archive
+        # A bot-protection page instead of the file, for example.
+        print(f"  {url} did not give the file with SHA256 {release['sha256']}", flush=True)
+    raise ValueError(f"Could not download {archive.name} with SHA256 {release['sha256']}")
+
+
+def fetch_base(arch: str, cache: Path) -> Path:
+    return fetch(release_config()["base"][arch], cache)
 
 
 def is_elf(path: Path) -> bool:
@@ -255,7 +295,57 @@ def replace_compiler(spark: Path, prefix: Path) -> None:
     strip(copied)
 
 
-def assemble(base_archive: Path, prefix: Path, gnat2why: Path, stage: Path) -> Path:
+def needed_libraries(path: Path) -> list[str]:
+    result = subprocess.run(["readelf", "-d", path], check=True, capture_output=True, text=True).stdout
+    return re.findall(r"\(NEEDED\)\s+Shared library: \[([^]]+)\]", result)
+
+
+def install_colibri(spark: Path, bundle: Path) -> Path:
+    """Install a COLIBRI bundle as libexec/spark/colibri, run as bin/colibri, which is on GNATprove's PATH."""
+    target = spark / "colibri"
+    with tempfile.TemporaryDirectory(dir=spark) as temporary:
+        with tarfile.open(bundle) as archive:
+            archive.extractall(temporary, filter="tar")
+        only_child(Path(temporary)).rename(target)
+
+    # The bundles are for Linux and Windows. Its Linux programs include ECLiPSe's eclipse.exe, so tell them apart
+    # by content, not by name.
+    for directory in sorted(target.rglob("*_nt"), reverse=True):
+        if directory.is_dir():
+            shutil.rmtree(directory)
+    for path in list(target.rglob("*")):
+        if path.is_file() and not path.is_symlink():
+            with path.open("rb") as stream:
+                if stream.read(2) == b"MZ":
+                    path.unlink()
+
+    # ECLiPSe's programs were linked against libnsl.so.1, which current glibc no longer provides, but use nothing
+    # from it. An empty library with that name, beside them, lets them load where the system has none.
+    for directory in sorted({path.parent for path in target.rglob("*")
+                             if is_elf(path) and "libnsl.so.1" in needed_libraries(path)}):
+        stub = directory / "libnsl.so.1"
+        if not stub.exists():
+            alr_exec("gcc", "-shared", "-nostdlib", "-Wl,-soname,libnsl.so.1", "-o", str(stub), "-x", "c",
+                     "/dev/null")
+
+    # The launcher finds its files through /proc/self/exe, so a symbolic link is enough.
+    (spark / "bin/colibri").symlink_to(os.path.relpath(target / "colibri", spark / "bin"))
+    return target
+
+
+def configure_colibri(conf: Path) -> None:
+    """Make GNATprove run COLIBRI with the arguments public COLIBRI releases accept."""
+    data = json.loads(conf.read_text())
+    entries = [prover for prover in data["provers"] if prover["name"] == "colibri"]
+    if len(entries) != 1:
+        raise ValueError(f"Expected one colibri prover in {conf}")
+    entries[0]["args"] = COLIBRI_ARGS
+    entries[0]["args_steps"] = COLIBRI_ARGS_STEPS
+    conf.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def assemble(base_archive: Path, prefix: Path, gnat2why: Path, stage: Path,
+             colibri_bundle: Path | None = None) -> Path:
     meta = metadata()
     if stage.exists():
         raise ValueError(f"Stage already exists; use a new directory: {stage}")
@@ -271,6 +361,13 @@ def assemble(base_archive: Path, prefix: Path, gnat2why: Path, stage: Path) -> P
     shutil.copy2(gnat2why, spark / "bin/gnat2why")
     strip([spark / "bin/gnat2why"])
 
+    colibri = colibri_release(meta["PACKAGE_ARCH"])
+    if colibri:
+        install_colibri(spark, colibri_bundle)
+        configure_colibri(package_root / "share/spark/config/gnatprove.conf")
+        # COLIBRI is under the LGPL version 2.1, which GCC also ships.
+        shutil.copy2(GCC_DIR / "COPYING.LIB", spark / "licenses/lgpl-2.1.txt")
+
     provenance = package_root / "share/gnatprove_prunt"
     provenance.mkdir(parents=True)
     shutil.copy2(INPUTS / "alire.toml", provenance / "build-inputs.toml")
@@ -279,7 +376,9 @@ def assemble(base_archive: Path, prefix: Path, gnat2why: Path, stage: Path) -> P
     (provenance / "sources.txt").write_text(
         f"gnatprove {meta['BASE_VERSION']} ({release_config()['base'][meta['PACKAGE_ARCH']]['url']})\n"
         f"spark2014 {meta['SPARK_COMMIT']}\n"
-        f"gcc {meta['GCC_COMMIT']}\n")
+        f"gcc {meta['GCC_COMMIT']}\n"
+        + (f"colibri {colibri['version']} ({colibri['url']}; {colibri['license']}, source {colibri['source']})\n"
+           if colibri else ""))
     return package_root
 
 
@@ -294,6 +393,19 @@ def check(package_root: Path) -> None:
     runtimes = list((spark / "lib/gcc").glob("*/*/adainclude"))
     if [runtime.parent.name for runtime in runtimes] != [version]:
         raise ValueError(f"Bundled Ada runtimes {runtimes} do not belong to the bundled gcc {version}")
+    colibri = colibri_release(metadata()["PACKAGE_ARCH"])
+    if colibri:
+        reported = subprocess.run([spark / "bin/colibri", "--version"], check=True, capture_output=True,
+                                  text=True).stdout.strip()
+        if reported != colibri["version"]:
+            raise ValueError(f"Bundled COLIBRI reports version {reported!r}, expected {colibri['version']}")
+        with tempfile.TemporaryDirectory() as temporary:
+            problem = Path(temporary) / "check.smt2"
+            problem.write_text(COLIBRI_CHECK)
+            arguments = [argument.replace("%m", "1000").replace("%f", str(problem)) for argument in COLIBRI_ARGS]
+            answer = subprocess.run([spark / "bin/colibri", *arguments], capture_output=True, text=True)
+        if answer.stdout.split()[:1] != ["unsat"]:
+            raise ValueError(f"Bundled COLIBRI did not solve its check problem:\n{answer.stdout}{answer.stderr}")
     run(package_root / "bin/gnatprove", "--version")
 
 
@@ -339,7 +451,9 @@ def main() -> None:
         prefix = compiler_prefix()
         verify_compiler(prefix)
         base = fetch_base(meta["PACKAGE_ARCH"], args.cache.resolve())
-        package_root = assemble(base, prefix, gnat2why, args.stage.resolve())
+        colibri = colibri_release(meta["PACKAGE_ARCH"])
+        colibri_bundle = fetch(colibri, args.cache.resolve()) if colibri else None
+        package_root = assemble(base, prefix, gnat2why, args.stage.resolve(), colibri_bundle)
         check(package_root)
         print(package(package_root, args.dist.resolve()))
     else:
