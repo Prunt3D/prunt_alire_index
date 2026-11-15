@@ -14,6 +14,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import libadalang_release as libadalang
+import gnatprove_release as gnatprove
 import release_metadata as gcc
 import publish_release as publisher
 
@@ -126,9 +127,140 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(any(fnmatch.fnmatchcase(path, pattern)
                                      for pattern in trigger["paths"]), expected)
 
+    def test_gnatprove_manifest_stands_alone_and_names_its_sources(self):
+        data = tomllib.loads(gnatprove.manifest({
+            "x86_64": ("https://example.com/x86.tar.gz", "a" * 64),
+            "aarch64": ("https://example.com/arm.tar.gz", "b" * 64),
+        }))
+        meta = gnatprove.metadata("owner/repo", "x86_64")
+        self.assertEqual(data["name"], "gnatprove")
+        self.assertEqual(data["version"], meta["CRATE_VERSION"])
+        # It bundles its compiler, so it must not constrain the consumer's toolchain.
+        self.assertNotIn("depends-on", data)
+        self.assertNotIn("provides", data)
+        self.assertTrue(data["configuration"]["disabled"])
+        self.assertEqual(data["environment"]["PATH"]["prepend"], "${CRATE_ROOT}/bin")
+        for commit in (meta["GCC_COMMIT"], meta["SPARK_COMMIT"]):
+            self.assertIn(commit, data["notes"])
+        origins = data["origin"]["case(os)"]["linux"]["case(host-arch)"]
+        self.assertEqual(set(origins), {"x86-64", "aarch64"})
+        self.assertTrue(all(origin["binary"] for origin in origins.values()))
+
+    def test_gnatprove_placeholder_checksums_cannot_be_published(self):
+        for digest in ("0" * 64, "", "not-a-hash"):
+            with self.subTest(digest=digest), self.assertRaises(ValueError):
+                gnatprove.manifest({"x86_64": ("https://example.com/test.tar.gz", digest)})
+
+    def test_gnatprove_metadata_without_initialized_submodules(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(gnatprove, "GCC_DIR", Path(directory) / "gcc"), \
+                 patch.object(gnatprove, "SPARK_DIR", Path(directory) / "spark2014"):
+                meta = gnatprove.metadata("owner/repo", "x86_64")
+        for name, key in (("gcc", "GCC_COMMIT"), ("spark2014", "SPARK_COMMIT")):
+            expected = subprocess.check_output(
+                ["git", "rev-parse", f"HEAD:{name}"], cwd=ROOT, text=True).strip()
+            self.assertEqual(meta[key], expected)
+
+    def test_gnatprove_release_names(self):
+        meta = gnatprove.metadata("owner/repo", "aarch64")
+        self.assertEqual(meta["ASSET_NAME"], f"gnatprove-aarch64-linux-{meta['CRATE_VERSION']}.tar.gz")
+        self.assertEqual(meta["MANIFEST_PATH"], f"index/gn/gnatprove/gnatprove-{meta['CRATE_VERSION']}.toml")
+        self.assertTrue(meta["RELEASE_URL"].startswith(
+            f"https://github.com/owner/repo/releases/download/gnatprove-{meta['CRATE_VERSION']}/"))
+
+    def test_gnatprove_version_follows_the_gcc_it_is_built_on(self):
+        meta = gnatprove.metadata("owner/repo", "x86_64")
+        self.assertEqual(meta["CRATE_VERSION"].split(".")[:2], meta["GNAT_VERSION"].split(".")[:2])
+        with patch.object(gnatprove, "release_config",
+                          return_value={**gnatprove.release_config(), "crate_version": "16.1.1001"}):
+            with self.assertRaisesRegex(ValueError, "not in the series"):
+                gnatprove.metadata("owner/repo", "x86_64")
+
+    def test_gnatprove_base_release_is_pinned_for_every_architecture(self):
+        base = gnatprove.release_config()["base"]
+        for arch in gcc.PACKAGE_ARCHES:
+            with self.subTest(arch=arch):
+                self.assertRegex(base[arch]["sha256"], r"^[0-9a-f]{64}$")
+                self.assertIn(base["version"], base[arch]["url"])
+                self.assertIn(f"{arch}-linux", base[arch]["url"])
+
+    def test_gnatprove_requires_the_compiler_released_from_the_gcc_submodule(self):
+        meta = gnatprove.metadata()
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = Path(directory) / "local"
+            prefix.mkdir()
+            for commit, accepted in ((meta["GCC_COMMIT"], True), ("1" * 40, False)):
+                (prefix.parent / "alire.toml").write_text(
+                    f'name = "gnat_native"\nversion = "{meta["GNAT_VERSION"]}"\n'
+                    f'notes = "Built from GCC {meta["GNAT_VERSION"]} commit {commit}"\n')
+                with self.subTest(accepted=accepted):
+                    if accepted:
+                        gnatprove.verify_compiler(prefix)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "not built from"):
+                            gnatprove.verify_compiler(prefix)
+
+    def test_gnatprove_compiler_is_replaced_component_by_component(self):
+        def tree(root, files):
+            for path in files:
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(f"{root.name}:{path}")
+
+        with tempfile.TemporaryDirectory() as directory:
+            spark, prefix = Path(directory) / "spark", Path(directory) / "prefix"
+            tree(spark, [
+                "bin/gcc", "bin/gnatls", "bin/x86_64-pc-linux-gnu-gcc-16.1.0", "bin/gnat2why", "bin/cvc5",
+                "lib/gcc/x86_64-pc-linux-gnu/16.1.0/adainclude/system.ads",
+                "libexec/gcc/x86_64-pc-linux-gnu/16.1.0/gnat1", "libexec/gcc/x86_64-pc-linux-gnu/16.1.0/cc1",
+                "libexec/gcc/x86_64-pc-linux-gnu/16.1.0/plugin/include/x.h",
+                "lib64/libgcc_s.so.1", "lib64/libgmp.so.10",
+            ])
+            tree(prefix, [
+                "bin/gcc", "bin/gnatls", "bin/gfortran", "bin/gnatmake", "bin/x86_64-pc-linux-gnu-gcc-16.2.0",
+                "bin/x86_64-pc-linux-gnu-gfortran",
+                "lib/gcc/x86_64-pc-linux-gnu/16.2.0/adainclude/system.ads",
+                "libexec/gcc/x86_64-pc-linux-gnu/16.2.0/gnat1", "libexec/gcc/x86_64-pc-linux-gnu/16.2.0/cc1",
+                "libexec/gcc/x86_64-pc-linux-gnu/16.2.0/f951",
+                "libexec/gcc/x86_64-pc-linux-gnu/16.2.0/plugin/include/x.h",
+                "lib64/libgcc_s.so.1", "lib64/libgfortran.so.5",
+            ])
+            gnatprove.replace_compiler(spark, prefix)
+            files = {str(path.relative_to(spark)): path.read_text()
+                     for path in spark.rglob("*") if path.is_file()}
+            self.assertEqual(files, {
+                "bin/gcc": "prefix:bin/gcc",
+                "bin/gnatls": "prefix:bin/gnatls",
+                "bin/x86_64-pc-linux-gnu-gcc-16.2.0": "prefix:bin/x86_64-pc-linux-gnu-gcc-16.2.0",
+                "bin/gnat2why": "spark:bin/gnat2why",
+                "bin/cvc5": "spark:bin/cvc5",
+                "lib/gcc/x86_64-pc-linux-gnu/16.2.0/adainclude/system.ads":
+                    "prefix:lib/gcc/x86_64-pc-linux-gnu/16.2.0/adainclude/system.ads",
+                "libexec/gcc/x86_64-pc-linux-gnu/16.2.0/gnat1": "prefix:libexec/gcc/x86_64-pc-linux-gnu/16.2.0/gnat1",
+                "libexec/gcc/x86_64-pc-linux-gnu/16.2.0/cc1": "prefix:libexec/gcc/x86_64-pc-linux-gnu/16.2.0/cc1",
+                "libexec/gcc/x86_64-pc-linux-gnu/16.2.0/plugin/include/x.h":
+                    "prefix:libexec/gcc/x86_64-pc-linux-gnu/16.2.0/plugin/include/x.h",
+                "lib64/libgcc_s.so.1": "prefix:lib64/libgcc_s.so.1",
+                "lib64/libgmp.so.10": "spark:lib64/libgmp.so.10",
+            })
+
+    def test_only_gnatprove_inputs_trigger_gnatprove_builds(self):
+        workflow = yaml.load((ROOT / ".github/workflows/build-gnatprove.yml").read_text(),
+                             Loader=yaml.BaseLoader)
+        trigger = workflow["on"]["push"]
+        self.assertEqual(trigger["branches"], ["master"])
+        for path, expected in (
+            ("spark2014", True), ("gnatprove/release.toml", True), ("gnatprove/alire.toml", True),
+            ("scripts/gnatprove_release.py", True), ("tests/gnatprove/src/dims.ads", True),
+            ("gcc", False), ("release.toml", False), ("libadalang/release.toml", False),
+            ("index/gn/gnatprove/gnatprove-16.2.1001.toml", False),
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(any(fnmatch.fnmatchcase(path, pattern)
+                                     for pattern in trigger["paths"]), expected)
+
     def test_publish_jobs_serialize_index_updates(self):
         groups = []
-        for name in ("build-gcc.yml", "build-libadalang.yml", "publish-index.yml"):
+        for name in ("build-gcc.yml", "build-libadalang.yml", "build-gnatprove.yml", "publish-index.yml"):
             workflow = yaml.load((ROOT / ".github/workflows" / name).read_text(),
                                  Loader=yaml.BaseLoader)
             concurrency = workflow["jobs"]["publish"]["concurrency"]

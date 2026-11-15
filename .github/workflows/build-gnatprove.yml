@@ -1,0 +1,113 @@
+name: Build GNATprove
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "gnatprove/**"
+      - "spark2014"
+      - "scripts/gnatprove_release.py"
+      - "scripts/smoke_test_gnatprove.py"
+      - "tests/gnatprove/**"
+      - ".github/workflows/build-gnatprove.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Load release metadata without downloading submodules
+        run: python3 scripts/gnatprove_release.py metadata --format github-env >> "$GITHUB_ENV"
+      - name: Refuse to rebuild an already published version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish_release.py --tag "$RELEASE_TAG" --check-unpublished
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    env:
+      PACKAGE_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Check out the GNAT front end and spark2014 sources
+        # Only gcc/ada of GCC is needed, and spark2014's own submodule (Why3) not at all.
+        run: git submodule update --init --depth 1 gcc spark2014
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgmp-dev python3
+      - uses: alire-project/setup-alire@v5
+        with:
+          version: 2.1.0
+          toolchain: --disable-assistant
+      - name: Use released Prunt compiler
+        run: |
+          alr -n index --add="git+https://github.com/${GITHUB_REPOSITORY}.git#alire-index" --name=prunt --before=community
+          alr -n index --update-all
+      - name: Build gnat2why and package GNATprove
+        run: python3 scripts/gnatprove_release.py build --jobs "$(nproc)"
+      - name: Test the binary archive through Alire
+        run: python3 scripts/smoke_test_gnatprove.py "dist/gnatprove-${{ matrix.arch }}-linux-"*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnatprove-${{ matrix.arch }}-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: alire-index-publication
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - uses: alire-project/setup-alire@v5
+        with:
+          version: 2.1.0
+          toolchain: --disable-assistant
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: gnatprove-*-${{ github.sha }}
+          path: dist
+          merge-multiple: true
+      - name: Generate and validate the index manifest
+        run: |
+          python3 scripts/gnatprove_release.py metadata --format github-env >> "$GITHUB_ENV"
+          python3 scripts/gnatprove_release.py manifest --repo-slug "$GITHUB_REPOSITORY"
+          alr -n index --add="$PWD" --name=prunt_ci --before=community
+          alr -n index --check
+          alr -n show "gnatprove=${CRATE_VERSION}"
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/publish_release.py --tag "$RELEASE_TAG" --title "$RELEASE_NAME" \
+            --notes "GNATprove ${BASE_VERSION} with gnat2why rebuilt from spark2014 commit ${SPARK_COMMIT} against the front end of Prunt GNAT ${GNAT_VERSION} (GCC commit ${GCC_COMMIT}), whose compiler it also bundles. Built on Ubuntu 24.04 for x86-64 and ARM64."
+      - name: Publish index branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/export_index_branch.sh --branch "$INDEX_BRANCH" --push

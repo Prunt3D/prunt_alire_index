@@ -1,6 +1,17 @@
 # Prunt Alire Index
 
-This repository builds GCC and a precompiled static Libadalang bundle for Linux x86-64 and ARM64.
+This repository builds GCC, a precompiled static Libadalang bundle and GNATprove for Linux x86-64 and ARM64.
+
+## GNATprove
+
+GNATprove analyses Ada with the copy of the GNAT front end inside gnat2why, and computes data representations with
+the GCC it bundles, so a released GNATprove rejects code which only Prunt's compiler accepts (for example the
+dimension of a range-constrained dimensioned subtype). The `gnatprove` crate here is AdaCore's released GNATprove
+(`gnatprove/release.toml`) with gnat2why rebuilt from the `spark2014` submodule against the `gcc` submodule's front
+end, and with that compiler, as released in `gnat_native`, in place of the bundled GCC. The driver, Why3, the
+provers and SPARKlib are unchanged. `scripts/gnatprove_release.py build` builds and packages it; it refuses a
+`gnat_native` release which was not built from the `gcc` submodule's commit, so a compiler update needs a new
+`gnatprove` release too.
 
 ## Using the index
 

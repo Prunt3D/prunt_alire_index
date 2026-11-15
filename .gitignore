@@ -10,3 +10,6 @@ tmp/
 /libadalang/alire/
 /libadalang/config/
 /libadalang/obj/
+/gnatprove/alire/
+/gnatprove/config/
+/gnatprove/obj/

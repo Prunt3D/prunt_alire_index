@@ -8,8 +8,10 @@ on:
       - "scripts/**"
       - "tests/**"
       - "libadalang/**"
+      - "gnatprove/**"
       - "release.toml"
       - "gcc"
+      - "spark2014"
   pull_request:
     branches: [master]
 

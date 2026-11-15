@@ -1,3 +1,6 @@
 [submodule "gcc"]
 	path = gcc
 	url = https://github.com/Prunt3D/gcc.git
+[submodule "spark2014"]
+	path = spark2014
+	url = https://github.com/AdaCore/spark2014.git

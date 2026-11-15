@@ -1,0 +1,23 @@
+name = "gnatprove_build"
+description = "Build inputs for Prunt GNATprove (gnat2why on the Prunt front end)"
+version = "0.0.0"
+licenses = "MIT"
+maintainers = ["Liam Powell <liam@liampwll.com>"]
+maintainers-logins = ["liampwll"]
+project-files = ["gnatprove_build.gpr"]
+
+[configuration]
+disabled = true
+
+# gnat2why is built by the compiler whose front end it contains, and the package
+# bundles that compiler, so these must name the release built from the gcc
+# submodule's commit.
+[[depends-on]]
+gnat_native = "=16.2.1008"
+gnat = "=16.2.1008"
+gprbuild = "=25.0.1"
+# GNATCOLL core comes from the static bundle, which the same compiler built.
+libadalang_prebuilt = "=26.0.1005"
+
+[gpr-set-externals]
+LIBRARY_TYPE = "static"
