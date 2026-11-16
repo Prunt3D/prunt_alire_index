@@ -19,7 +19,7 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         timeout-minutes: 5
@@ -42,7 +42,8 @@ jobs:
           - runner: ubuntu-24.04-arm-16core
             arch: aarch64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    # 13 to 17 min on the 16-core runners.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
         timeout-minutes: 5
@@ -76,12 +77,14 @@ jobs:
           path: dist/*
           if-no-files-found: error
           retention-days: 7
+          # Already gzipped, so zipping them again for the upload would only cost time.
+          compression-level: 0
 
   publish:
     needs: build
     if: github.ref == 'refs/heads/master' && !inputs.build_only
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     permissions:
       contents: write
     concurrency:

@@ -415,6 +415,15 @@ class ReleaseTests(unittest.TestCase):
                                           step=step.get("name", step.get("uses"))):
                             self.assertIn("timeout-minutes", step)
 
+    def test_uploads_do_not_compress_the_archives_again(self):
+        for path in sorted((ROOT / ".github/workflows").glob("*.yml")):
+            workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+            for job_name, job in workflow["jobs"].items():
+                for step in job["steps"]:
+                    if step.get("uses", "").startswith("actions/upload-artifact@"):
+                        with self.subTest(workflow=path.name, job=job_name):
+                            self.assertEqual(step["with"].get("compression-level"), "0")
+
     def test_build_only_runs_skip_the_published_check_and_publication(self):
         for name in ("build-gcc.yml", "build-gnatprove.yml", "build-libadalang.yml"):
             workflow = yaml.load((ROOT / ".github/workflows" / name).read_text(),

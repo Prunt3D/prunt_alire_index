@@ -22,7 +22,7 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         timeout-minutes: 5
@@ -53,7 +53,8 @@ jobs:
           - runner: ubuntu-24.04-arm-16core
             arch: aarch64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    # About 8 min on the 16-core runners.
+    timeout-minutes: 25
     env:
       PACKAGE_ARCH: ${{ matrix.arch }}
     steps:
@@ -63,7 +64,8 @@ jobs:
           submodules: false
       - name: Check out the GNAT front end and spark2014 sources
         # Only gcc/ada of GCC is needed, and spark2014's own submodule (Why3) not at all.
-        timeout-minutes: 10
+        # Under a minute.
+        timeout-minutes: 5
         run: git submodule update --init --depth 1 gcc spark2014
       - name: Install prerequisites
         run: |
@@ -87,12 +89,14 @@ jobs:
           path: dist/*
           if-no-files-found: error
           retention-days: 7
+          # Already gzipped, so zipping them again for the upload would only cost time.
+          compression-level: 0
 
   publish:
     needs: build
     if: github.ref == 'refs/heads/master' && !inputs.build_only
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     permissions:
       contents: write
     concurrency:
