@@ -401,7 +401,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(len(set(groups)), 1)
 
     def test_build_only_runs_skip_the_published_check_and_publication(self):
-        for name in ("build-gcc.yml", "build-gnatprove.yml"):
+        for name in ("build-gcc.yml", "build-gnatprove.yml", "build-libadalang.yml"):
             workflow = yaml.load((ROOT / ".github/workflows" / name).read_text(),
                                  Loader=yaml.BaseLoader)
             with self.subTest(workflow=name):

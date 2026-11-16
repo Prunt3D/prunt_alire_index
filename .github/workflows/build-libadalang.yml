@@ -7,6 +7,11 @@ on:
       - "libadalang/**"
       - "scripts/libadalang_release.py"
   workflow_dispatch:
+    inputs:
+      build_only:
+        description: Build and test without publishing, even a version which is already published
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,6 +24,7 @@ jobs:
       - name: Load release metadata
         run: python3 scripts/libadalang_release.py metadata --format github-env >> "$GITHUB_ENV"
       - name: Refuse to rebuild an already published version
+        if: ${{ !inputs.build_only }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/publish_release.py --tag "$RELEASE_TAG" --check-unpublished
@@ -29,9 +35,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-24.04
+          - runner: ubuntu-24.04-16core
             arch: x86_64
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-24.04-arm-16core
             arch: aarch64
     runs-on: ${{ matrix.runner }}
     steps:
@@ -69,7 +75,7 @@ jobs:
 
   publish:
     needs: build
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' && !inputs.build_only
     runs-on: ubuntu-24.04
     permissions:
       contents: write
