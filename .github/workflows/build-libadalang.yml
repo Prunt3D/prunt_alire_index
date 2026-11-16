@@ -6,7 +6,6 @@ on:
     paths:
       - "libadalang/**"
       - "scripts/libadalang_release.py"
-      - ".github/workflows/build-libadalang.yml"
   workflow_dispatch:
 
 permissions:

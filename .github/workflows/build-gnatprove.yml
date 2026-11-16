@@ -9,7 +9,6 @@ on:
       - "scripts/gnatprove_release.py"
       - "scripts/smoke_test_gnatprove.py"
       - "tests/gnatprove/**"
-      - ".github/workflows/build-gnatprove.yml"
   workflow_dispatch:
 
 permissions:

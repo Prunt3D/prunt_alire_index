@@ -367,6 +367,8 @@ class ReleaseTests(unittest.TestCase):
             ("scripts/gnatprove_release.py", True), ("tests/gnatprove/src/dims.ads", True),
             ("gcc", False), ("release.toml", False), ("libadalang/release.toml", False),
             ("index/gn/gnatprove/gnatprove-16.2.1001.toml", False),
+            # Rebuilding a published version is refused, so a workflow edit alone could only fail.
+            (".github/workflows/build-gnatprove.yml", False),
         ):
             with self.subTest(path=path):
                 self.assertEqual(any(fnmatch.fnmatchcase(path, pattern)
