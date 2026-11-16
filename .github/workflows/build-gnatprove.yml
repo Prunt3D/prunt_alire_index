@@ -22,8 +22,10 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 5
         with:
           submodules: false
       - name: Load release metadata without downloading submodules
@@ -35,6 +37,7 @@ jobs:
         run: python3 scripts/publish_release.py --tag "$RELEASE_TAG" --check-unpublished
       - name: Require the published compiler which the archive bundles
         # A push which also releases that compiler starts this workflow before Build GCC has published it.
+        timeout-minutes: 5
         run: |
           git fetch --depth=1 origin alire-index
           python3 scripts/gnatprove_release.py check-compiler --index-ref FETCH_HEAD
@@ -50,14 +53,17 @@ jobs:
           - runner: ubuntu-24.04-arm-16core
             arch: aarch64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     env:
       PACKAGE_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 5
         with:
           submodules: false
       - name: Check out the GNAT front end and spark2014 sources
         # Only gcc/ada of GCC is needed, and spark2014's own submodule (Why3) not at all.
+        timeout-minutes: 10
         run: git submodule update --init --depth 1 gcc spark2014
       - name: Install prerequisites
         run: |
@@ -86,6 +92,7 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/master' && !inputs.build_only
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
     concurrency:
@@ -93,6 +100,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 5
         with:
           submodules: false
       - uses: alire-project/setup-alire@v5

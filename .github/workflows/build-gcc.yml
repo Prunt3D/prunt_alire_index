@@ -19,8 +19,10 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 5
         with:
           submodules: false
       - name: Load release metadata without downloading GCC
@@ -41,12 +43,14 @@ jobs:
           - runner: ubuntu-24.04-arm-16core
             package_arch: aarch64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     env:
       PACKAGE_ARCH: ${{ matrix.package_arch }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        timeout-minutes: 5
         with:
           fetch-depth: 0
           persist-credentials: true
@@ -55,6 +59,7 @@ jobs:
       - name: Checkout GCC
         # Only the GCC submodule: spark2014 and its Why3 submodule are for the GNATprove build.
         # Shallow, as only the pinned commit is built and recorded.
+        timeout-minutes: 10
         run: git submodule update --init --depth 1 gcc
 
       - name: Install build prerequisites
@@ -109,6 +114,7 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/master' && !inputs.build_only
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
     concurrency:
@@ -118,6 +124,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        timeout-minutes: 5
         with:
           fetch-depth: 0
           persist-credentials: true

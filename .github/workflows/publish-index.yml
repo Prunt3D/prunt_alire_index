@@ -12,11 +12,13 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     concurrency:
       group: alire-index-publication
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 5
         with:
           submodules: false
       - uses: alire-project/setup-alire@v5

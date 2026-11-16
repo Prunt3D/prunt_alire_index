@@ -400,6 +400,21 @@ class ReleaseTests(unittest.TestCase):
             groups.append(concurrency["group"])
         self.assertEqual(len(set(groups)), 1)
 
+    def test_jobs_and_clones_time_out(self):
+        # GitHub's default is six hours, so a stalled clone or build would otherwise hold a runner that long.
+        for path in sorted((ROOT / ".github/workflows").glob("*.yml")):
+            workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+            for job_name, job in workflow["jobs"].items():
+                with self.subTest(workflow=path.name, job=job_name):
+                    self.assertIn("timeout-minutes", job)
+                for step in job["steps"]:
+                    script = step.get("run", "")
+                    if (step.get("uses", "").startswith("actions/checkout@")
+                            or "git submodule" in script or "git fetch" in script):
+                        with self.subTest(workflow=path.name, job=job_name,
+                                          step=step.get("name", step.get("uses"))):
+                            self.assertIn("timeout-minutes", step)
+
     def test_build_only_runs_skip_the_published_check_and_publication(self):
         for name in ("build-gcc.yml", "build-gnatprove.yml", "build-libadalang.yml"):
             workflow = yaml.load((ROOT / ".github/workflows" / name).read_text(),

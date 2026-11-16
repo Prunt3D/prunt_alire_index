@@ -22,8 +22,10 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 5
         with:
           submodules: false
       - name: Install test dependency
