@@ -400,6 +400,19 @@ class ReleaseTests(unittest.TestCase):
             groups.append(concurrency["group"])
         self.assertEqual(len(set(groups)), 1)
 
+    def test_build_only_runs_skip_the_published_check_and_publication(self):
+        for name in ("build-gcc.yml", "build-gnatprove.yml"):
+            workflow = yaml.load((ROOT / ".github/workflows" / name).read_text(),
+                                 Loader=yaml.BaseLoader)
+            with self.subTest(workflow=name):
+                build_only = workflow["on"]["workflow_dispatch"]["inputs"]["build_only"]
+                self.assertEqual((build_only["type"], build_only["default"]), ("boolean", "false"))
+                checks = [step for step in workflow["jobs"]["prepare"]["steps"]
+                          if "--check-unpublished" in step.get("run", "")]
+                self.assertEqual([step.get("if") for step in checks], ["${{ !inputs.build_only }}"])
+                self.assertEqual(workflow["jobs"]["publish"]["if"],
+                                 "github.ref == 'refs/heads/master' && !inputs.build_only")
+
     def test_index_export_preserves_both_packages_and_older_versions(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -10,6 +10,11 @@ on:
       - "scripts/smoke_test_gnatprove.py"
       - "tests/gnatprove/**"
   workflow_dispatch:
+    inputs:
+      build_only:
+        description: Build and test without publishing, even a version which is already published
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -24,6 +29,7 @@ jobs:
       - name: Load release metadata without downloading submodules
         run: python3 scripts/gnatprove_release.py metadata --format github-env >> "$GITHUB_ENV"
       - name: Refuse to rebuild an already published version
+        if: ${{ !inputs.build_only }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/publish_release.py --tag "$RELEASE_TAG" --check-unpublished
@@ -78,7 +84,7 @@ jobs:
 
   publish:
     needs: build
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' && !inputs.build_only
     runs-on: ubuntu-24.04
     permissions:
       contents: write
