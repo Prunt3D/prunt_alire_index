@@ -13,8 +13,8 @@ disabled = true
 # bundles that compiler, so these must name the release built from the gcc
 # submodule's commit.
 [[depends-on]]
-gnat_native = "=16.2.1008"
-gnat = "=16.2.1008"
+gnat_native = "=16.2.1009"
+gnat = "=16.2.1009"
 gprbuild = "=25.0.1"
 # GNATCOLL core comes from the static bundle, which the same compiler built.
 libadalang_prebuilt = "=26.0.1005"
