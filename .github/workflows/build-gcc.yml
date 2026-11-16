@@ -30,9 +30,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - runner: ubuntu-24.04
+          - runner: ubuntu-24.04-16core
             package_arch: x86_64
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-24.04-arm-16core
             package_arch: aarch64
     runs-on: ${{ matrix.runner }}
     env:
@@ -48,7 +48,8 @@ jobs:
 
       - name: Checkout GCC
         # Only the GCC submodule: spark2014 and its Why3 submodule are for the GNATprove build.
-        run: git submodule update --init gcc
+        # Shallow, as only the pinned commit is built and recorded.
+        run: git submodule update --init --depth 1 gcc
 
       - name: Install build prerequisites
         run: |

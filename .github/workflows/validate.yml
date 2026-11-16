@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - ".github/workflows/**"
+      - ".github/actionlint.yaml"
       - "scripts/**"
       - "tests/**"
       - "libadalang/**"

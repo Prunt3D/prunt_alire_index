@@ -1,0 +1,5 @@
+self-hosted-runner:
+  # Larger GitHub-hosted runners configured in the Prunt3D organisation, used to build GCC and GNATprove.
+  labels:
+    - ubuntu-24.04-16core
+    - ubuntu-24.04-arm-16core
