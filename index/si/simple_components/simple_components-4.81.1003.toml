@@ -1,0 +1,39 @@
+description = "Simple Components - A collection of support packages"
+name = "simple_components"
+version = "4.81.1003"
+website = "http://www.dmitry-kazakov.de/ada/components.htm"
+authors = ["Dmitry A. Kazakov"]
+licenses = "GPL-2.0-only WITH GCC-exception-2.0"
+maintainers = ["Liam Powell <liam@liampwll.com>"]
+maintainers-logins = ["liampwll"]
+notes = "Prunt's fork of Simple Components 4.81, from https://github.com/Prunt3D/dak_simple_components"
+tags = ["collection"]
+project-files = ["components-connections_server-http_server.gpr", "components-connections_server-openssl.gpr", "components-connections_server-secure.gpr", "components-connections_server.gpr", "components-gnutls.gpr", "components-json.gpr",  "components-openssl.gpr", "components.gpr", "strings_edit.gpr", "tables.gpr"]
+
+[[depends-on]]
+libgnutls = "^3.7"
+
+[gpr-externals]
+Development = ["Debug", "Release", "Profile"] # Default Debug
+Driver = ["MySQL", "PostgreSQL", "SyBase", "CT_Lib"] # Default MySQL
+Legacy = ["Ada95", "Ada2005", "Ada2012"] # Default Ada2012
+Target_OS = ["Windows", "Windows_NT", "Linux", "UNIX", "OSX", "FreeBSD", "auto"] # Default Windows
+Tasking = ["Multiple", "Single"] # Default Multiple
+Traced_Objects = ["Off", "On"] # Default Off
+
+[gpr-set-externals]
+Object_Dir = "nested"
+
+[gpr-set-externals."case(os)"]
+freebsd = { Target_OS = "FreeBSD" }
+linux   = { Target_OS = "Linux", odbc = "unixODBC" }
+macos   = { Target_OS = "OSX" }
+windows = { Target_OS = "Windows", odbc = "ODBC32" }
+
+[gpr-set-externals."case(word-size)"]
+bits-32 = { arch = "i686" }
+bits-64 = { arch = "x86_64" }
+
+[origin]
+url = "git+https://github.com/Prunt3D/dak_simple_components.git"
+commit = "f6c37398393766ab989a1e422550b594f914f489"
